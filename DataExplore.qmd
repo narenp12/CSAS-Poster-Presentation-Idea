@@ -1,0 +1,87 @@
+---
+title: "Betting Data Exploration"
+subtitle: "CSAS 2026"
+author: "Naren Prakash"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(DataExplorer)
+```
+```{r}
+files <- list.files("Seasonal Data", full.names = TRUE)
+full_data <- sapply(files, read_csv)
+```
+
+```{r}
+s04_sub <- full_data$`Seasonal Data/Season02004.csv`
+#DataExplorer::create_report(s04_sub)
+```
+## Season 2004 subset, Bet365 odds and NO Asian handicap, example cleaning and mutation
+
+```{r}
+library(lubridate)
+s04 <- s04_sub %>%
+  select("Date", "HomeTeam", "AwayTeam", "FTHG", "FTAG", "FTR", "B365H", "B365D", "B365A") %>%
+  mutate(Date = dmy(Date))
+```
+
+## Applying data cleaning to all datasets, then binding game dataset into one
+
+```{r}
+games <- full_data %>%
+  map(~ .x %>%
+    select(Date, HomeTeam, AwayTeam, FTHG, FTAG, FTR, B365H, B365D, B365A) %>%
+    mutate(Date = dmy(Date)) %>%
+    mutate(Season = year(max(Date)))) %>%
+  bind_rows()
+```
+```{r}
+head(games)
+```
+
+## Team level dataset
+
+```{r}
+home_team <- games %>%
+  transmute(
+    Date,
+    Season,
+    Team = HomeTeam,
+    Opponent = AwayTeam,
+    GoalsFor = FTHG,
+    GoalsAgainst = FTAG,
+    Home = 1,
+    Odds = B365H,
+    OddsDraw = B365D,
+    Result = case_when(
+      FTR == "H" ~ "W",
+      FTR == "D" ~ "D",
+      FTR == "A" ~ "L"
+    )
+  )
+
+away_team <- games %>%
+  transmute(
+    Date,
+    Season,
+    Team = AwayTeam,
+    Opponent = HomeTeam,
+    GoalsFor = FTAG,
+    GoalsAgainst = FTHG,
+    Home = 0,
+    Odds = B365A,
+    OddsDraw = B365D,
+    Result = case_when(
+      FTR == "A" ~ "W",
+      FTR == "D" ~ "D",
+      FTR == "H" ~ "L"
+    )
+  )
+
+team_level <- bind_rows(home_team, away_team)
+```
+```{r}
+head(team_level)
+```
