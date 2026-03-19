@@ -1,0 +1,42 @@
+---
+title: "Odds to Probability Distribution Transformations"
+subtitle: "CSAS 2026"
+author: "Naren Prakash"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(DataExplorer)
+library(implied)
+library(janitor)
+```
+```{r}
+games <- read_csv("games.csv")
+set.seed(24)
+```
+```{r}
+game_odds <- games %>% select(B365H, B365D, B365A)
+
+transformed_odds <- implied_probabilities(game_odds, method = "power")
+head(transformed_odds$probabilities)
+oddprobs <- data.frame(transformed_odds$probabilities)
+```
+```{r}
+inspect_set <- data.frame(games$Date, games$HomeTeam, games$AwayTeam, games$Season) %>%
+  bind_cols(oddprobs) %>%
+  clean_names()
+inspect_set %>% ggplot(aes(x = b365h)) +
+  geom_histogram(bins = 40) +
+  ggtitle("Empirical histogram of Bet365 Home Probs")
+```
+
+```{r}
+data <- inspect_set$b365h
+qqnorm(data, main = "Normal Q-Q Plot")
+qqline(data, col = "red")
+plot(ecdf(data))
+```
+```{r}
+plot_histogram(inspect_set[-4])
+```
