@@ -8,6 +8,7 @@ format: html
 ```{r}
 library(tidyverse)
 library(DataExplorer)
+library(janitor)
 ```
 ```{r}
 files <- list.files("Seasonal Data", full.names = TRUE)
@@ -86,13 +87,32 @@ away_team <- games %>%
     )
   )
 
-team_level <- bind_rows(home_team, away_team)
+team_level <- bind_rows(home_team, away_team) %>%
+  clean_names() %>%
+  arrange(date)
 ```
 ```{r}
 head(team_level)
+```
+
+```{r}
+promoted <- read_csv("promoted.csv") %>% clean_names()
+promoted$season <- promoted$season + 1
+team_level <- team_level %>% left_join(promoted)
+```
+```{r}
+relegated <- read_csv("relegated.csv") %>%
+  clean_names() %>%
+  filter(season >= 2004)
+team_level <- team_level %>% left_join(relegated)
+```
+```{r}
+team_level %>% filter(season == 2004)
+team_level$promoted[is.na(team_level$promoted)] <- FALSE
+team_level$relegated[is.na(team_level$relegated)] <- FALSE
+team_level %>% filter(season == 2004)
 ```
 ```{r}
 write_csv(games, "games.csv")
 write_csv(team_level, "team_data.csv")
 ```
-

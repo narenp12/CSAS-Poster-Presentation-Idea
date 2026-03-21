@@ -23,7 +23,7 @@ head(transformed_odds$probabilities)
 oddprobs <- data.frame(transformed_odds$probabilities)
 ```
 ```{r}
-inspect_set <- data.frame(games$Date, games$HomeTeam, games$AwayTeam, games$Season) %>%
+inspect_set <- games %>% select(Date, Season, HomeTeam, AwayTeam) %>%
   bind_cols(oddprobs) %>%
   clean_names()
 inspect_set %>% ggplot(aes(x = b365h)) +
@@ -40,3 +40,7 @@ plot(ecdf(data))
 ```{r}
 plot_histogram(inspect_set[-4])
 ```
+```{r}
+summary(inspect_set)
+```
+
