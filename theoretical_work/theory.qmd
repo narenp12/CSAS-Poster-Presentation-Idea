@@ -1,0 +1,16 @@
+---
+title: "Theoretical notation / ideas for project"
+subtitle: "CSAS 2026"
+author: "Naren Prakash"
+format: html
+---
+
+# Modeling Win/Draw/Loss probabilities
+
+-   Goal: Identify how relegated teams are different from surviving teams (using bookmaker expectations) and looking at **uncertainty** (use statistical entropy)
+
+-   Bookmaker probabilities - fixed, point level estimates taken as given information
+
+-   Match outcomes - (Win, draw, loss)
+
+-   
