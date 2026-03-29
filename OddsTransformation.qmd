@@ -94,15 +94,41 @@ plot2 <- ggplot(
 plot1 / plot2
 ```
 
+```{r}
+# Join actual results to the long format
+inspect_long_with_results <- inspect_long %>%
+  mutate(
+    result_indicator = case_when(
+      odds_type == "b365h" & result == "H" ~ 1,
+      odds_type == "b365d" & result == "D" ~ 1,
+      odds_type == "b365a" & result == "A" ~ 1,
+      TRUE ~ 0
+    )
+  )
+
+# Plot odds lines with actual results overlaid
+ggplot(inspect_long_with_results, aes(x = date, y = betting_odds, color = odds_type)) +
+  geom_line(alpha = 0.5) +
+  geom_point(
+    data = filter(inspect_long_with_results, result_indicator == 1),
+    aes(x = date, y = betting_odds),
+    size = 2,
+    shape = 21,
+    fill = "white",
+    stroke = 1.5
+  ) +
+  labs(
+    title = "Bet365 Odds vs Actual Results (2004 Season)",
+    x = "Date",
+    y = "Probability",
+    color = "Odds Type"
+  ) +
+  theme_minimal()
+```
+
 ## Looking at match level-predictions vs match-level results (crudely)
 
 ```{r}
 predictions <- inspect_long %>% group_by(date, season, home_team, away_team) %>% summarize(betting_odds = max(betting_odds)) %>% ungroup() %>% left_join(inspect_long) %>% mutate(odds_type = toupper(str_remove_all(odds_type, "^b365")))
 print(mean(predictions$odds_type == predictions$result))
 ```
-
-```{r}
-
-```
- 
- 
