@@ -64,6 +64,12 @@ inspect_long %>%
   geom_line()
 ```
 ```{r}
+inspect_wide <- inspect_set %>%
+  mutate(value = 1) %>%
+  pivot_wider(names_from = result, values_from = value, values_fill = 0) %>%
+  select(-"NA")
+```
+```{r}
 library(patchwork)
 
 inspect_long <- inspect_set %>%
@@ -87,18 +93,16 @@ plot2 <- ggplot(
   labs(title = "Match Results")
 plot1 / plot2
 ```
-```{r}
-inspect_wide <- inspect_set %>%
-  mutate(value = 1) %>%
-  pivot_wider(names_from = result, values_from = value, values_fill = 0) %>%
-  select(-"NA")
-```
 
 ## Looking at match level-predictions vs match-level results (crudely)
 
 ```{r}
 predictions <- inspect_long %>% group_by(date, season, home_team, away_team) %>% summarize(betting_odds = max(betting_odds)) %>% ungroup() %>% left_join(inspect_long) %>% mutate(odds_type = toupper(str_remove_all(odds_type, "^b365")))
-predictions
+print(mean(predictions$odds_type == predictions$result))
+```
+
+```{r}
+
 ```
  
  
