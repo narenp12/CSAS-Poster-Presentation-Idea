@@ -9,8 +9,28 @@ format: html
 
 -   Goal: Identify how relegated teams are different from surviving teams (using bookmaker expectations) and looking at **uncertainty** (use statistical entropy)
 
+-   Using bookmaker odds as approximations of latent match probabilities, uncovered using a hierarchical model
+
+    ## Observations
+
 -   Bookmaker probabilities - fixed, point level estimates taken as given information
 
 -   Match outcomes - (Win, draw, loss)
 
+-   Probability vector, $p_i = (p_{i,w},p_{i,d}, p_{i,l})$
+
+    -   Where $p_w$ represents probability of a win (for home side), $p_d$ represents a probability of a draw for both sides, and $p_l$ represents probability of a loss (home side)
+
+    -   $p_i$ represents probability for the ith match (observation)
+
+    -   Probabilities from transformation of Bet365 odds
+
+-   Random variable $y_i$ represents the match outcome for each match i
+
+    -   Thus, we define $y_i$ to be distributed as $Categorical(p_i)$, a generalization of the Bernoulli distribution for the three match end states
+
+-   $t_i$ represents the season of interest
+
 -   
+
+## 

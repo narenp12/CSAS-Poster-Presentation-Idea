@@ -23,7 +23,8 @@ head(transformed_odds$probabilities)
 oddprobs <- data.frame(transformed_odds$probabilities)
 ```
 ```{r}
-inspect_set <- games %>% select(Date, Season, HomeTeam, AwayTeam) %>%
+inspect_set <- games %>%
+  select(Date, Season, HomeTeam, AwayTeam) %>%
   bind_cols(oddprobs) %>%
   clean_names()
 inspect_set %>% ggplot(aes(x = b365h)) +
@@ -43,4 +44,61 @@ plot_histogram(inspect_set[-4])
 ```{r}
 summary(inspect_set)
 ```
+```{r}
+inspect_set <- inspect_set %>%
+  bind_cols(games$FTR) %>%
+  clean_names() %>%
+  rename(result = x8)
+```
+```{r}
+inspect_set %>%
+  filter(season == 2004) %>%
+  ggplot(aes(x = date, y = b365h)) +
+  geom_line()
+```
+```{r}
+inspect_long <- pivot_longer(inspect_set, cols = c("b365h", "b365d", "b365a"), names_to = "odds_type", values_to = "betting_odds")
+inspect_long %>%
+  filter(season == 2004) %>%
+  ggplot(aes(x = date, y = betting_odds, colour = odds_type)) +
+  geom_line()
+```
+```{r}
+library(patchwork)
 
+inspect_long <- inspect_set %>%
+  filter(season == 2004) %>%
+  mutate(date = as.Date(date)) %>%
+  pivot_longer(
+    cols = c("b365h", "b365d", "b365a"),
+    names_to = "odds_type",
+    values_to = "betting_odds"
+  )
+
+plot1 <- ggplot(inspect_long, aes(x = date, y = betting_odds, color = odds_type)) +
+  geom_line() +
+  labs(title = "Betting Odds")
+
+plot2 <- ggplot(
+  inspect_wide %>% filter(season == 2004) %>% mutate(date = as.Date(date)),
+  aes(x = date, y = H)
+) +
+  geom_point() +
+  labs(title = "Match Results")
+plot1 / plot2
+```
+```{r}
+inspect_wide <- inspect_set %>%
+  mutate(value = 1) %>%
+  pivot_wider(names_from = result, values_from = value, values_fill = 0) %>%
+  select(-"NA")
+```
+
+## Looking at match level-predictions vs match-level results (crudely)
+
+```{r}
+predictions <- inspect_long %>% group_by(date, season, home_team, away_team) %>% summarize(betting_odds = max(betting_odds)) %>% ungroup() %>% left_join(inspect_long) %>% mutate(odds_type = toupper(str_remove_all(odds_type, "^b365")))
+predictions
+```
+ 
+ 
