@@ -1,39 +1,175 @@
 ---
-title: "Theoretical notation / ideas for project"
-subtitle: "CSAS 2026"
+title: "Theoretical Framework"
+subtitle: "A Bayesian Hierarchical Approach to EPL Relegation Analysis"
 author: "Naren Prakash"
 format: html
 ---
 
-# Modeling Win/Draw/Loss probabilities
+# Introduction
 
--   Goal: Identify how relegated teams are different from surviving teams (using bookmaker expectations) and looking at **uncertainty** (use statistical entropy)
+Central question: Are teams relegated from the English Premier League systematically different from those that survive? This is evaluated through 2 measures.
 
--   Using bookmaker odds as approximations of latent match probabilities, uncovered using a hierarchical model
+1.  **Bookmaker bias**: Do betting markets systematically misprice match outcomes for relegation-bound teams?
+2.  **Uncertainty**: Are matches involving these teams more unpredictable than the odds suggest?
 
-    ## Observations
+To answer these questions, I develop a Bayesian hierarchical model that treats bookmaker probabilities as a starting point and then estimates structured deviations from them. The hierarchical structure allows information to be shared across teams and seasons, which is crucial when dealing with relegated teams that have limited observations.
 
--   Bookmaker probabilities - fixed, point level estimates taken as given information
+---
 
--   Match outcomes - (Win, draw, loss)
+# Data Structure
 
--   Probability vector, $p_i = (p_{i,w},p_{i,d}, p_{i,l})$
+## Match-Level Observations
 
-    -   Where $p_w$ represents probability of a win (for home side), $p_d$ represents a probability of a draw for both sides, and $p_l$ represents probability of a loss (home side)
+The data consist of $N$ matches from over 20 Premier League seasons (2004--2025). For each match $i$, I observe:
 
-    -   $p_i$ represents probability for the ith match (observation)
+-   **Outcome**: $y_i \in \{\text{W}, \text{D}, \text{L}\}$, the full-time result from the home team's perspective
 
-    -   Probabilities from transformation of Bet365 odds
+-   **Bookmaker probabilities**: $p_i = (p_{i,w}, p_{i,d}, p_{i,l})$, derived from Bet365 odds using the power method to correct for the overround. These satisfy $p_k \geq 0$ and $\sum_k p_k = 1$.
 
--   Random variable $y_i$ represents the match outcome for each match i
+-   **Teams**: $h(i)$ and $a(i)$ denote the home and away teams
 
-    -   Thus, we define $y_i$ to be distributed as $Categorical(p_i)$, a generalization of the Bernoulli distribution for the three match end states
+-   **Season**: $t \in \{2004, \ldots, 2025\}$
 
--   $t$ represents the season of interest
+-   **Relegation status**: $r_{c,t} = 1$ if club $c$ is relegated in season $t$, and 0 otherwise
 
--   $h(i)$ or $a(i)$ represents the home and away indicator functions for match i
--  $r_t$ represents the relegation status of the home team for season t
+## From Odds to Probabilities
 
-## Latent variables
-- $\pi_i$ represents the the latent probability vector for match i, with $\pi_i = (\pi_{i,w}, \pi_{i,d}, \pi_{i,l})$ where w,d,l correspond to the win/draw/loss probabilities for the home team using betting odd probabilities
-- $\theta_{c, t}$ for club $c$ in season $t$ is the latent team strength
+Raw betting odds are converted to probabilities using the `implied` R package with the power method, which accounts for the bookmaker's overround (the built-in profit margin). This transformation ensures that the probabilities sum to one while preserving the relative information in the odds.
+
+---
+
+# Model Specification
+
+## Likelihood
+
+Match outcomes are modeled as draws from a categorical distribution:
+
+$$y_i \sim \text{Categorical}(\pi_i)$$
+
+Here, $\pi_i$ represents the *latent* true probabilities---distinct from the bookmaker probabilities $p_i$. This distinction is crucial: it allows the model to discover where bookmakers are systematically wrong.
+
+## The Calibration Layer
+
+The core of the model connects bookmaker probabilities to latent truth through a log-linear adjustment:
+
+$$\pi_i = \text{softmax}(\log p_i + \eta_i)$$
+
+In component form, this becomes:
+
+$$\pi_{i,k} = \frac{p_{i,k} \exp(\eta_{i,k})}{\sum_{j} p_{i,j} \exp(\eta_{i,j})}$$
+
+### Why This Formulation?
+
+Probabilities must sum to one, which rules out simple additive adjustments. Working in log-probability space solves this problem:
+
+1.  The log transform maps probabilities to unconstrained real space
+2.  Additive structure becomes possible: $\log \pi_i = \log p_i + \eta_i$
+3.  The softmax maps back to valid probabilities
+
+The resulting model has a clean interpretation: $\pi_{i,k} \propto p_{i,k} \cdot \exp(\eta_{i,k})$, meaning the deviation term multiplicatively reweights the bookmaker's baseline. When $\eta_i = 0$, the bookmakers are perfectly calibrated. Positive values of $\eta_{i,k}$ indicate that outcome $k$ is underpriced, while negative values indicate overpricing.
+
+## Modeling the Deviations
+
+The deviation term $\eta_i$ is where the substantive hypotheses enter the model. I specify:
+
+$$
+\eta_i = \begin{bmatrix}
+\theta_{h(i),t} - \theta_{a(i),t} + \gamma_1 r_{h(i),t} - \gamma_2 r_{a(i),t} \\
+\delta \\
+\theta_{a(i),t} - \theta_{h(i),t} + \gamma_2 r_{a(i),t} - \gamma_1 r_{h(i),t}
+\end{bmatrix}
+$$
+
+This structure has three components:
+
+**Team strength.** The term $\theta_{c,t}$ represents the latent strength of club $c$ in season $t$. The difference $\theta_{h(i),t} - \theta_{a(i),t}$ captures the home team's relative advantage. Stronger teams should have higher win probabilities, all else equal.
+
+**Relegation effects.** The parameters $\gamma_1$ and $\gamma_2$ are the focus of the analysis. They capture systematic deviations for relegated teams:
+-   $\gamma_1$: adjustment when the home team is relegated
+-   $\gamma_2$: adjustment when the away team is relegated
+
+If bookmakers misprice relegation teams---perhaps overestimating their chances due to "Premier League status" bias---these parameters will detect it.
+
+**Draw tendency.** The parameter $\delta$ adjusts for draw frequency, which isn't well explained by strength differences alone.
+
+To ensure identifiability, I impose the constraint $\sum_c \theta_{c,t} = 0$ within each season.
+
+## Hierarchical Priors
+
+Team strengths are given a hierarchical prior:
+
+$$\theta_{c,t} \sim \mathcal{N}(\mu_\theta, \sigma_\theta^2)$$
+
+This induces partial pooling: estimates for individual teams are shrunk toward the league average, with the degree of shrinkage determined by the data. This is especially important for newly promoted teams with limited top-flight observations.
+
+The relegation effects and draw parameter receive weakly informative priors:
+
+$$\gamma_1, \gamma_2, \delta \sim \mathcal{N}(0, \sigma^2)$$
+
+Standard deviation parameters receive half-Normal priors. I also consider a dynamic extension where team strengths evolve via a random walk: $\theta_{c,t} \sim \mathcal{N}(\theta_{c,t-1}, \sigma_{\text{evol}}^2)$, capturing changes due to transfers, injuries, and managerial turnover.
+
+---
+
+# Derived Quantities
+
+## Entropy
+
+Entropy measures the uncertainty in a probability distribution. For the latent probabilities:
+
+$$H(\pi_i) = -\sum_{k} \pi_{i,k} \log \pi_{i,k}$$
+
+I also compute entropy for the bookmaker probabilities $H(p_i)$ and define the **entropy gap**:
+
+$$\Delta H_i = H(\pi_i) - H(p_i)$$
+
+When $\Delta H_i > 0$, the model implies more uncertainty than the bookmaker odds suggest---the match is more volatile than expected. When $\Delta H_i < 0$, the outcome is more predictable than the odds imply.
+
+## Calibration Error
+
+The Kullback-Leibler divergence measures overall miscalibration:
+
+$$D_{\text{KL}}(\pi_i \parallel p_i) = \sum_{k} \pi_{i,k} \log \frac{\pi_{i,k}}{p_{i,k}}$$
+
+This equals zero when the bookmaker is perfectly calibrated and increases with the magnitude of mispricing.
+
+## Comparing Relegated and Surviving Teams
+
+The model enables several group-level comparisons:
+
+-   Average entropy for matches involving relegated teams versus survivors
+-   Average calibration error for relegated teams
+-   Posterior estimates of $\gamma_1$ and $\gamma_2$, which directly quantify bookmaker bias
+
+These comparisons form the basis of three hypothesis tests:
+
+-   **H1**: Relegated teams exhibit higher calibration error (more mispricing)
+-   **H2**: Matches with relegated teams have higher latent entropy
+-   **H3**: Bookmakers underestimate uncertainty for relegated teams ($\Delta H_i > 0$ on average)
+
+---
+
+# Summary
+
+## Generative Process
+
+The model can be summarized as follows:
+
+1.  Draw hyperparameters from their priors
+2.  For each club and season, draw team strength $\theta_{c,t}$ from the hierarchical prior
+3.  Draw relegation effects $\gamma_1, \gamma_2$ and draw parameter $\delta$
+4.  For each match:
+    -   Compute $\eta_i$ from team strengths and relegation status
+    -   Compute latent probabilities $\pi_i = \text{softmax}(\log p_i + \eta_i)$
+    -   Draw the observed outcome $y_i \sim \text{Categorical}(\pi_i)$
+
+## Estimation
+
+Posterior inference is carried out via Markov Chain Monte Carlo using Stan. Given the observed outcomes and bookmaker probabilities, the posterior distribution is:
+
+$$p(\theta, \gamma, \delta, \sigma \mid y, p) \propto \left[ \prod_{i=1}^N \text{Categorical}(y_i \mid \pi_i) \right] \times \text{Priors}$$
+
+From the posterior samples, I extract estimates of team strengths, relegation effects, and the derived entropy and calibration measures.
+
+## Contribution
+
+The novelty of this approach lies in treating bookmaker probabilities as an informative baseline within a hierarchical model, rather than ignoring them or treating them as predictions to be beaten. The relegation-specific parameters $\gamma_1$ and $\gamma_2$ provide direct tests of market efficiency, while the entropy calculations reveal whether uncertainty itself is mispriced for teams at the bottom of the table.
