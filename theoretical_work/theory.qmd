@@ -29,8 +29,11 @@ format: html
 
     -   Thus, we define $y_i$ to be distributed as $Categorical(p_i)$, a generalization of the Bernoulli distribution for the three match end states
 
--   $t_i$ represents the season of interest
+-   $t$ represents the season of interest
 
--   
+-   $h(i)$ or $a(i)$ represents the home and away indicator functions for match i
+-  $r_t$ represents the relegation status of the home team for season t
 
-## 
+## Latent variables
+- $\pi_i$ represents the the latent probability vector for match i, with $\pi_i = (\pi_{i,w}, \pi_{i,d}, \pi_{i,l})$ where w,d,l correspond to the win/draw/loss probabilities for the home team using betting odd probabilities
+- $\theta_{c, t}$ for club $c$ in season $t$ is the latent team strength
