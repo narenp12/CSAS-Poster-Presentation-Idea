@@ -124,12 +124,16 @@ window.Quarto = {
 <li><p><span class="math inline">\(t\)</span> represents the season of interest</p></li>
 <li><p><span class="math inline">\(h(i)\)</span> or <span class="math inline">\(a(i)\)</span> represents the home and away indicator functions for match i</p></li>
 <li><p><span class="math inline">\(r_t\)</span> represents the relegation status of the home team for season t</p></li>
+<li><p><span class="math inline">\(p_t\)</span> represents the promotion status of the home team for season t</p></li>
 </ul>
 <section id="latent-variables" class="level2">
 <h2 class="anchored" data-anchor-id="latent-variables">Latent variables</h2>
 <ul>
 <li><span class="math inline">\(\pi_i\)</span> represents the the latent probability vector for match i, with <span class="math inline">\(\pi_i = (\pi_{i,w}, \pi_{i,d}, \pi_{i,l})\)</span> where w,d,l correspond to the win/draw/loss probabilities for the home team using betting odd probabilities</li>
-<li><span class="math inline">\(\theta_{c, t}\)</span> for club <span class="math inline">\(c\)</span> in season <span class="math inline">\(t\)</span> is the latent team strength</li>
+<li><span class="math inline">\(\theta_{c, t}\)</span> for club <span class="math inline">\(c\)</span> in season <span class="math inline">\(t\)</span> is the latent team strength
+<ul>
+<li>Dynamic extension: Random walk to analyze seasonal trajectories</li>
+</ul></li>
 </ul>
 </section>
 </section>

@@ -33,7 +33,10 @@ format: html
 
 -   $h(i)$ or $a(i)$ represents the home and away indicator functions for match i
 -  $r_t$ represents the relegation status of the home team for season t
+- $p_t$ represents the promotion status of the home team for season t
 
 ## Latent variables
 - $\pi_i$ represents the the latent probability vector for match i, with $\pi_i = (\pi_{i,w}, \pi_{i,d}, \pi_{i,l})$ where w,d,l correspond to the win/draw/loss probabilities for the home team using betting odd probabilities
 - $\theta_{c, t}$ for club $c$ in season $t$ is the latent team strength
+    - Dynamic extension: Random walk to analyze seasonal trajectories
+
