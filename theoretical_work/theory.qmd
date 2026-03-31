@@ -27,7 +27,8 @@ format: html
 
 -   Random variable $y_i$ represents the match outcome for each match i
 
-    -   Thus, we define $y_i$ to be distributed as $Categorical(p_i)$, a generalization of the Bernoulli distribution for the three match end states
+    -   Thus, we define $y_i$ to be distributed as $Categorical(\pi_i)$, a generalization of the Bernoulli distribution for the three match end states
+        - Note that this depends on the **latent** probabilities rather than the bookmaker estimates
 
 -   $t$ represents the season of interest
 

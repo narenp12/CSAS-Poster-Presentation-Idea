@@ -119,7 +119,10 @@ window.Quarto = {
 </ul></li>
 <li><p>Random variable <span class="math inline">\(y_i\)</span> represents the match outcome for each match i</p>
 <ul>
-<li>Thus, we define <span class="math inline">\(y_i\)</span> to be distributed as <span class="math inline">\(Categorical(p_i)\)</span>, a generalization of the Bernoulli distribution for the three match end states</li>
+<li>Thus, we define <span class="math inline">\(y_i\)</span> to be distributed as <span class="math inline">\(Categorical(\pi_i)\)</span>, a generalization of the Bernoulli distribution for the three match end states
+<ul>
+<li>Note that this depends on the <strong>latent</strong> probabilities rather than the bookmaker estimates</li>
+</ul></li>
 </ul></li>
 <li><p><span class="math inline">\(t\)</span> represents the season of interest</p></li>
 <li><p><span class="math inline">\(h(i)\)</span> or <span class="math inline">\(a(i)\)</span> represents the home and away indicator functions for match i</p></li>
