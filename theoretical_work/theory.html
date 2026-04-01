@@ -8,7 +8,7 @@
 
 <meta name="author" content="Naren Prakash">
 
-<title>Theoretical notation / ideas for project</title>
+<title>Bayesian Hierarchical Model of Match Uncertainty</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -23,6 +23,41 @@ ul.task-list li input[type="checkbox"] {
   width: 0.8em;
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 </style>
 
@@ -79,7 +114,7 @@ window.Quarto = {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Theoretical notation / ideas for project</h1>
+<h1 class="title">Bayesian Hierarchical Model of Match Uncertainty</h1>
 <p class="subtitle lead">CSAS 2026</p>
 </div>
 
@@ -103,42 +138,193 @@ window.Quarto = {
 </header>
 
 
-<section id="modeling-windrawloss-probabilities" class="level1">
-<h1>Modeling Win/Draw/Loss probabilities</h1>
+<section id="research-question" class="level1">
+<h1>Research Question</h1>
+<p><strong>Goal:</strong> Compare statistical entropy (match uncertainty) between teams that would eventually be relegated vs.&nbsp;teams that were not.</p>
+<p><strong>Approach:</strong> Use bookmaker odds to compute Shannon entropy for each match, then model entropy as a function of eventual relegation status using a Bayesian hierarchical model.</p>
+<hr>
+</section>
+<section id="data-structure" class="level1">
+<h1>Data Structure</h1>
+<section id="observations" class="level2">
+<h2 class="anchored" data-anchor-id="observations">Observations</h2>
 <ul>
-<li><p>Goal: Identify how relegated teams are different from surviving teams (using bookmaker expectations) and looking at <strong>uncertainty</strong> (use statistical entropy)</p></li>
-<li><p>Using bookmaker odds as approximations of latent match probabilities, uncovered using a hierarchical model</p>
-<h2 id="observations" class="anchored" data-anchor-id="modeling-windrawloss-probabilities">Observations</h2></li>
-<li><p>Bookmaker probabilities - fixed, point level estimates taken as given information</p></li>
-<li><p>Match outcomes - (Win, draw, loss)</p></li>
-<li><p>Probability vector, <span class="math inline">\(p_i = (p_{i,w},p_{i,d}, p_{i,l})\)</span></p>
+<li>Match <span class="math inline">\(i\)</span> in season <span class="math inline">\(t\)</span> between home team <span class="math inline">\(h\)</span> and away team <span class="math inline">\(a\)</span></li>
+<li>Bookmaker probabilities from Bet365 odds (power transformation)</li>
+<li>Probability vector: <span class="math inline">\(p_i = (p_{i,w}, p_{i,d}, p_{i,l})\)</span>
 <ul>
-<li><p>Where <span class="math inline">\(p_w\)</span> represents probability of a win (for home side), <span class="math inline">\(p_d\)</span> represents a probability of a draw for both sides, and <span class="math inline">\(p_l\)</span> represents probability of a loss (home side)</p></li>
-<li><p><span class="math inline">\(p_i\)</span> represents probability for the ith match (observation)</p></li>
-<li><p>Probabilities from transformation of Bet365 odds</p></li>
-</ul></li>
-<li><p>Random variable <span class="math inline">\(y_i\)</span> represents the match outcome for each match i</p>
-<ul>
-<li>Thus, we define <span class="math inline">\(y_i\)</span> to be distributed as <span class="math inline">\(Categorical(\pi_i)\)</span>, a generalization of the Bernoulli distribution for the three match end states
-<ul>
-<li>Note that this depends on the <strong>latent</strong> probabilities rather than the bookmaker estimates</li>
-</ul></li>
-</ul></li>
-<li><p><span class="math inline">\(t\)</span> represents the season of interest</p></li>
-<li><p><span class="math inline">\(h(i)\)</span> or <span class="math inline">\(a(i)\)</span> represents the home and away indicator functions for match i</p></li>
-<li><p><span class="math inline">\(r_t\)</span> represents the relegation status of the home team for season t</p></li>
-<li><p><span class="math inline">\(p_t\)</span> represents the promotion status of the home team for season t</p></li>
-</ul>
-<section id="latent-variables" class="level2">
-<h2 class="anchored" data-anchor-id="latent-variables">Latent variables</h2>
-<ul>
-<li><span class="math inline">\(\pi_i\)</span> represents the the latent probability vector for match i, with <span class="math inline">\(\pi_i = (\pi_{i,w}, \pi_{i,d}, \pi_{i,l})\)</span> where w,d,l correspond to the win/draw/loss probabilities for the home team using betting odd probabilities</li>
-<li><span class="math inline">\(\theta_{c, t}\)</span> for club <span class="math inline">\(c\)</span> in season <span class="math inline">\(t\)</span> is the latent team strength
-<ul>
-<li>Dynamic extension: Random walk to analyze seasonal trajectories</li>
+<li><span class="math inline">\(p_{i,w}\)</span> = probability of home win</li>
+<li><span class="math inline">\(p_{i,d}\)</span> = probability of draw</li>
+<li><span class="math inline">\(p_{i,l}\)</span> = probability of away win (home loss)</li>
 </ul></li>
 </ul>
 </section>
+<section id="relegationpromotion-indicators" class="level2">
+<h2 class="anchored" data-anchor-id="relegationpromotion-indicators">Relegation/Promotion Indicators</h2>
+<ul>
+<li><span class="math inline">\(R_{c,t} \in \{0, 1\}\)</span> = 1 if team <span class="math inline">\(c\)</span> is <strong>relegated at the end of</strong> season <span class="math inline">\(t\)</span></li>
+<li><span class="math inline">\(P_{c,t} \in \{0, 1\}\)</span> = 1 if team <span class="math inline">\(c\)</span> was <strong>promoted into</strong> season <span class="math inline">\(t\)</span></li>
+</ul>
+<p>Note: Relegation status is known only after the season ends, but we use it to explain entropy patterns <em>during</em> the season.</p>
+<hr>
+</section>
+</section>
+<section id="shannon-entropy-match-uncertainty" class="level1">
+<h1>Shannon Entropy (Match Uncertainty)</h1>
+<section id="definition" class="level2">
+<h2 class="anchored" data-anchor-id="definition">Definition</h2>
+<p>For match <span class="math inline">\(i\)</span>, entropy of the bookmaker probability distribution:</p>
+<p><span class="math display">\[H_i = -\sum_{k \in \{w,d,l\}} p_{i,k} \log_3(p_{i,k})\]</span></p>
+</section>
+<section id="properties" class="level2">
+<h2 class="anchored" data-anchor-id="properties">Properties</h2>
+<ul>
+<li>Range: <span class="math inline">\(H_i \in [0, 1]\)</span> (base-3 log normalizes to unit interval)</li>
+<li><span class="math inline">\(H_i = 0\)</span>: Certain outcome (one outcome near 100%)</li>
+<li><span class="math inline">\(H_i = 1\)</span>: Maximum uncertainty (equal probabilities: 1/3, 1/3, 1/3)</li>
+</ul>
+<hr>
+</section>
+</section>
+<section id="bayesian-hierarchical-model" class="level1">
+<h1>Bayesian Hierarchical Model</h1>
+<section id="likelihood" class="level2">
+<h2 class="anchored" data-anchor-id="likelihood">Likelihood</h2>
+<p>Since <span class="math inline">\(H_i \in [0, 1]\)</span>, we use Beta regression:</p>
+<p><span class="math display">\[H_i \sim \text{Beta}(\mu_i, \phi)\]</span></p>
+<p>where:</p>
+<ul>
+<li><span class="math inline">\(\mu_i \in [0, 1]\)</span> = expected entropy for match <span class="math inline">\(i\)</span></li>
+<li><span class="math inline">\(\phi &gt; 0\)</span> = precision parameter (higher = less variance around mean)</li>
+</ul>
+</section>
+<section id="linear-predictor" class="level2">
+<h2 class="anchored" data-anchor-id="linear-predictor">Linear Predictor</h2>
+<p><span class="math display">\[\text{logit}(\mu_i) = \delta_0 + \delta_R (R_{h,t} + R_{a,t}) + \delta_P (P_{h,t} + P_{a,t}) + \theta_{h,t} + \theta_{a,t}\]</span></p>
+<p>Parameters:</p>
+<ul>
+<li><span class="math inline">\(\delta_0\)</span> = baseline entropy (neither relegated nor promoted)</li>
+<li><span class="math inline">\(\delta_R\)</span> = effect of each relegated team in the match</li>
+<li><span class="math inline">\(\delta_P\)</span> = effect of each promoted team in the match</li>
+<li><span class="math inline">\(\theta_{h,t}, \theta_{a,t}\)</span> = team-specific random effects</li>
+</ul>
+</section>
+<section id="hierarchical-priors" class="level2">
+<h2 class="anchored" data-anchor-id="hierarchical-priors">Hierarchical Priors</h2>
+<p>Team random effects (partial pooling):</p>
+<p><span class="math display">\[\theta_{c,t} \sim \text{Normal}(\mu_c, \sigma_\theta)\]</span> <span class="math display">\[\mu_c \sim \text{Normal}(0, \tau)\]</span></p>
+<p>This allows each team to have its own entropy tendency, while borrowing strength across teams.</p>
+</section>
+<section id="hyperpriors" class="level2">
+<h2 class="anchored" data-anchor-id="hyperpriors">Hyperpriors</h2>
+<p><span class="math display">\[\delta_0 \sim \text{Normal}(0, 1)\]</span> <span class="math display">\[\delta_R \sim \text{Normal}(0, 0.5)\]</span> <span class="math display">\[\delta_P \sim \text{Normal}(0, 0.5)\]</span> <span class="math display">\[\sigma_\theta \sim \text{HalfCauchy}(0, 1)\]</span> <span class="math display">\[\tau \sim \text{HalfCauchy}(0, 1)\]</span> <span class="math display">\[\phi \sim \text{Gamma}(2, 0.1)\]</span></p>
+<hr>
+</section>
+</section>
+<section id="hypotheses" class="level1">
+<h1>Hypotheses</h1>
+<section id="primary-hypothesis-relegation" class="level2">
+<h2 class="anchored" data-anchor-id="primary-hypothesis-relegation">Primary Hypothesis (Relegation)</h2>
+<p><strong>H1:</strong> Matches involving eventually-relegated teams have different entropy than other matches.</p>
+<ul>
+<li><span class="math inline">\(\delta_R &lt; 0\)</span>: <strong>Lower entropy</strong> — Relegated teams play predictable matches (blowout losses to stronger teams)</li>
+<li><span class="math inline">\(\delta_R &gt; 0\)</span>: <strong>Higher entropy</strong> — Relegated teams play in chaotic, unpredictable matches</li>
+<li><span class="math inline">\(\delta_R \approx 0\)</span>: No difference — Bookmakers don’t distinguish relegated teams</li>
+</ul>
+</section>
+<section id="secondary-hypothesis-promotion" class="level2">
+<h2 class="anchored" data-anchor-id="secondary-hypothesis-promotion">Secondary Hypothesis (Promotion)</h2>
+<p><strong>H2:</strong> Matches involving newly-promoted teams have different entropy.</p>
+<ul>
+<li><span class="math inline">\(\delta_P &gt; 0\)</span>: <strong>Higher entropy</strong> — Bookmakers uncertain about promoted teams (unknown quantity)</li>
+<li><span class="math inline">\(\delta_P &lt; 0\)</span>: <strong>Lower entropy</strong> — Promoted teams are clearly outclassed</li>
+</ul>
+</section>
+<section id="exploratory-six-pointers" class="level2">
+<h2 class="anchored" data-anchor-id="exploratory-six-pointers">Exploratory: Six-Pointers</h2>
+<p>Matches where both teams are relegated (<span class="math inline">\(R_{h,t} = 1\)</span> AND <span class="math inline">\(R_{a,t} = 1\)</span>):</p>
+<ul>
+<li>These “six-pointers” may have unusually <strong>high entropy</strong> (anyone’s game)</li>
+<li>Could add interaction term: <span class="math inline">\(\delta_{RR} \cdot (R_{h,t} \times R_{a,t})\)</span></li>
+</ul>
+<hr>
+</section>
+</section>
+<section id="model-extensions" class="level1">
+<h1>Model Extensions</h1>
+<section id="asymmetric-homeaway-effects" class="level2">
+<h2 class="anchored" data-anchor-id="asymmetric-homeaway-effects">1. Asymmetric Home/Away Effects</h2>
+<p>Allow relegated home vs.&nbsp;away teams to have different effects:</p>
+<p><span class="math display">\[\text{logit}(\mu_i) = \delta_0 + \delta_{R,h} R_{h,t} + \delta_{R,a} R_{a,t} + \delta_{P,h} P_{h,t} + \delta_{P,a} P_{a,t} + \theta_{h,t} + \theta_{a,t}\]</span></p>
+</section>
+<section id="time-varying-relegation-effect" class="level2">
+<h2 class="anchored" data-anchor-id="time-varying-relegation-effect">2. Time-Varying Relegation Effect</h2>
+<p>Test if entropy difference emerges over the season:</p>
+<p><span class="math display">\[\delta_R(w) = \delta_{R,0} + \delta_{R,1} \cdot \text{match\_week}\]</span></p>
+<ul>
+<li>Early season: <span class="math inline">\(\delta_R\)</span> small (unclear who will go down)</li>
+<li>Late season: <span class="math inline">\(\delta_R\)</span> large (pattern obvious to bookmakers)</li>
+</ul>
+</section>
+<section id="dynamic-team-strength-random-walk" class="level2">
+<h2 class="anchored" data-anchor-id="dynamic-team-strength-random-walk">3. Dynamic Team Strength (Random Walk)</h2>
+<p>Track team entropy tendencies across seasons:</p>
+<p><span class="math display">\[\theta_{c,t} \sim \text{Normal}(\theta_{c,t-1}, \sigma_{\text{drift}})\]</span></p>
+<p>Useful if teams have persistent “chaotic” or “predictable” styles.</p>
+</section>
+<section id="opponent-quality-interaction" class="level2">
+<h2 class="anchored" data-anchor-id="opponent-quality-interaction">4. Opponent Quality Interaction</h2>
+<p>Relegated team vs.&nbsp;top-6 may differ from relegated team vs.&nbsp;mid-table:</p>
+<p><span class="math display">\[+ \gamma \cdot (R_{h,t} \times \text{top6}_{a,t})\]</span></p>
+<hr>
+</section>
+</section>
+<section id="implementation-notes" class="level1">
+<h1>Implementation Notes</h1>
+<section id="software" class="level2">
+<h2 class="anchored" data-anchor-id="software">Software</h2>
+<ul>
+<li><code>brms</code> package in R (Stan backend)</li>
+<li>Family: <code>Beta()</code> with logit link</li>
+<li>Syntax example:</li>
+</ul>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">brm</span>(</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bf</span>(entropy <span class="sc">|</span> <span class="fu">trials</span>(<span class="dv">1</span>) <span class="sc">~</span> relegated_count <span class="sc">+</span> promoted_count <span class="sc">+</span> (<span class="dv">1</span> <span class="sc">|</span> team)),</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> matches,</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">family =</span> <span class="fu">Beta</span>(),</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">prior =</span> <span class="fu">c</span>(</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">prior</span>(<span class="fu">normal</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="at">class =</span> Intercept),</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">prior</span>(<span class="fu">normal</span>(<span class="dv">0</span>, <span class="fl">0.5</span>), <span class="at">class =</span> b),</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">prior</span>(<span class="fu">cauchy</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="at">class =</span> sd)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="diagnostics" class="level2">
+<h2 class="anchored" data-anchor-id="diagnostics">Diagnostics</h2>
+<ul>
+<li><span class="math inline">\(\hat{R} &lt; 1.05\)</span> for all parameters (convergence)</li>
+<li>Effective sample size &gt; 400 per chain</li>
+<li>Posterior predictive checks: Does simulated entropy match observed?</li>
+</ul>
+</section>
+<section id="data-requirements" class="level2">
+<h2 class="anchored" data-anchor-id="data-requirements">Data Requirements</h2>
+<ul>
+<li>Seasons: 2003-04 through 2024-25 (21 seasons)</li>
+<li>Matches: ~8,000 total</li>
+<li>Relegated teams: 3 per season × 21 = 63 team-seasons</li>
+<li>Promoted teams: 3 per season × 21 = 63 team-seasons</li>
+</ul>
+<hr>
+</section>
+</section>
+<section id="expected-contributions" class="level1">
+<h1>Expected Contributions</h1>
+<ol type="1">
+<li><strong>Methodological:</strong> Entropy as measure of bookmaker uncertainty in sports betting</li>
+<li><strong>Substantive:</strong> Do bookmakers “know” which teams will be relegated early?</li>
+<li><strong>Practical:</strong> Could entropy patterns inform early-season relegation prediction</li>
+</ol>
 </section>
 
 </main>
