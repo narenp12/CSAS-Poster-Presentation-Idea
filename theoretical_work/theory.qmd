@@ -7,31 +7,33 @@ format: html
 
 # Research Question
 
-**Goal:** Compare statistical entropy (match uncertainty) between teams that would eventually be relegated vs. teams that were not.
+**Goal:** Assess whether match-level uncertainty (entropy) contains predictive signal for relegation outcomes, beyond what is captured by bookmaker probabilities alone.
 
-**Approach:** Use bookmaker odds to compute Shannon entropy for each match, then model entropy as a function of eventual relegation status using a Bayesian hierarchical model.
+**Approach:** Construct rolling entropy features from bookmaker odds for each team during the season, then use a Bayesian hierarchical logistic regression to predict eventual relegation. The hierarchy pools information across teams and seasons, controlling for persistent team-level tendencies and season-level competitive balance.
 
----
+**Key Hypothesis:** Higher average match uncertainty (entropy) for a team during the season is associated with a higher probability of relegation, controlling for other factors.
+
+------------------------------------------------------------------------
 
 # Data Structure
 
-## Observations
+## Match-Level Observations
 
-- Match $i$ in season $t$ between home team $h$ and away team $a$
-- Bookmaker probabilities from Bet365 odds (power transformation)
-- Probability vector: $p_i = (p_{i,w}, p_{i,d}, p_{i,l})$
-    - $p_{i,w}$ = probability of home win
-    - $p_{i,d}$ = probability of draw
-    - $p_{i,l}$ = probability of away win (home loss)
+-   Match $i$ in season $t$ between home team $h$ and away team $a$
+-   Bookmaker probabilities from Bet365 odds (power transformation)
+  - Clarke(2017) and implied R package for transformation
+-   Probability vector: $p_i = (p_{i,w}, p_{i,d}, p_{i,l})$
+    -   $p_{i,w}$ = probability of home win
+    -   $p_{i,d}$ = probability of draw
+    -   $p_{i,l}$ = probability of away win (home loss)
 
-## Relegation/Promotion Indicators
+## Relegation Outcome
 
-- $R_{c,t} \in \{0, 1\}$ = 1 if team $c$ is **relegated at the end of** season $t$
-- $P_{c,t} \in \{0, 1\}$ = 1 if team $c$ was **promoted into** season $t$
+-   $Y_{c,t} \in \{0, 1\}$ = 1 if team $c$ is relegated at the end of season $t$
 
-Note: Relegation status is known only after the season ends, but we use it to explain entropy patterns *during* the season.
+**Key design choice:** The model uses only information available *during* the season (rolling entropy) to predict an outcome realized *after* the season ends. Relegation status is the target variable
 
----
+------------------------------------------------------------------------
 
 # Shannon Entropy (Match Uncertainty)
 
@@ -41,154 +43,6 @@ For match $i$, entropy of the bookmaker probability distribution:
 
 $$H_i = -\sum_{k \in \{w,d,l\}} p_{i,k} \log_3(p_{i,k})$$
 
-## Properties
-
-- Range: $H_i \in [0, 1]$ (base-3 log normalizes to unit interval)
-- $H_i = 0$: Certain outcome (one outcome near 100%)
-- $H_i = 1$: Maximum uncertainty (equal probabilities: 1/3, 1/3, 1/3)
-
----
+------------------------------------------------------------------------
 
 # Bayesian Hierarchical Model
-
-## Likelihood
-
-Since $H_i \in [0, 1]$, we use Beta regression:
-
-$$H_i \sim \text{Beta}(\mu_i, \phi)$$
-
-where:
-
-- $\mu_i \in [0, 1]$ = expected entropy for match $i$
-- $\phi > 0$ = precision parameter (higher = less variance around mean)
-
-## Linear Predictor
-
-$$\text{logit}(\mu_i) = \delta_0 + \delta_R (R_{h,t} + R_{a,t}) + \delta_P (P_{h,t} + P_{a,t}) + \theta_{h,t} + \theta_{a,t}$$
-
-Parameters:
-
-- $\delta_0$ = baseline entropy (neither relegated nor promoted)
-- $\delta_R$ = effect of each relegated team in the match
-- $\delta_P$ = effect of each promoted team in the match
-- $\theta_{h,t}, \theta_{a,t}$ = team-specific random effects
-
-## Hierarchical Priors
-
-Team random effects (partial pooling):
-
-$$\theta_{c,t} \sim \text{Normal}(\mu_c, \sigma_\theta)$$
-$$\mu_c \sim \text{Normal}(0, \tau)$$
-
-This allows each team to have its own entropy tendency, while borrowing strength across teams.
-
-## Hyperpriors
-
-$$\delta_0 \sim \text{Normal}(0, 1)$$
-$$\delta_R \sim \text{Normal}(0, 0.5)$$
-$$\delta_P \sim \text{Normal}(0, 0.5)$$
-$$\sigma_\theta \sim \text{HalfCauchy}(0, 1)$$
-$$\tau \sim \text{HalfCauchy}(0, 1)$$
-$$\phi \sim \text{Gamma}(2, 0.1)$$
-
----
-
-# Hypotheses
-
-## Primary Hypothesis (Relegation)
-
-**H1:** Matches involving eventually-relegated teams have different entropy than other matches.
-
-- $\delta_R < 0$: **Lower entropy** — Relegated teams play predictable matches (blowout losses to stronger teams)
-- $\delta_R > 0$: **Higher entropy** — Relegated teams play in chaotic, unpredictable matches
-- $\delta_R \approx 0$: No difference — Bookmakers don't distinguish relegated teams
-
-## Secondary Hypothesis (Promotion)
-
-**H2:** Matches involving newly-promoted teams have different entropy.
-
-- $\delta_P > 0$: **Higher entropy** — Bookmakers uncertain about promoted teams (unknown quantity)
-- $\delta_P < 0$: **Lower entropy** — Promoted teams are clearly outclassed
-
-## Exploratory: Six-Pointers
-
-Matches where both teams are relegated ($R_{h,t} = 1$ AND $R_{a,t} = 1$):
-
-- These "six-pointers" may have unusually **high entropy** (anyone's game)
-- Could add interaction term: $\delta_{RR} \cdot (R_{h,t} \times R_{a,t})$
-
----
-
-# Model Extensions
-
-## 1. Asymmetric Home/Away Effects
-
-Allow relegated home vs. away teams to have different effects:
-
-$$\text{logit}(\mu_i) = \delta_0 + \delta_{R,h} R_{h,t} + \delta_{R,a} R_{a,t} + \delta_{P,h} P_{h,t} + \delta_{P,a} P_{a,t} + \theta_{h,t} + \theta_{a,t}$$
-
-## 2. Time-Varying Relegation Effect
-
-Test if entropy difference emerges over the season:
-
-$$\delta_R(w) = \delta_{R,0} + \delta_{R,1} \cdot \text{match\_week}$$
-
-- Early season: $\delta_R$ small (unclear who will go down)
-- Late season: $\delta_R$ large (pattern obvious to bookmakers)
-
-## 3. Dynamic Team Strength (Random Walk)
-
-Track team entropy tendencies across seasons:
-
-$$\theta_{c,t} \sim \text{Normal}(\theta_{c,t-1}, \sigma_{\text{drift}})$$
-
-Useful if teams have persistent "chaotic" or "predictable" styles.
-
-## 4. Opponent Quality Interaction
-
-Relegated team vs. top-6 may differ from relegated team vs. mid-table:
-
-$$+ \gamma \cdot (R_{h,t} \times \text{top6}_{a,t})$$
-
----
-
-# Implementation Notes
-
-## Software
-
-- `brms` package in R (Stan backend)
-- Family: `Beta()` with logit link
-- Syntax example:
-```r
-brm(
-  bf(entropy | trials(1) ~ relegated_count + promoted_count + (1 | team)),
-  data = matches,
-  family = Beta(),
-  prior = c(
-    prior(normal(0, 1), class = Intercept),
-    prior(normal(0, 0.5), class = b),
-    prior(cauchy(0, 1), class = sd)
-  )
-)
-```
-
-## Diagnostics
-
-- $\hat{R} < 1.05$ for all parameters (convergence)
-- Effective sample size > 400 per chain
-- Posterior predictive checks: Does simulated entropy match observed?
-
-## Data Requirements
-
-- Seasons: 2003-04 through 2024-25 (21 seasons)
-- Matches: ~8,000 total
-- Relegated teams: 3 per season × 21 = 63 team-seasons
-- Promoted teams: 3 per season × 21 = 63 team-seasons
-
----
-
-# Expected Contributions
-
-1. **Methodological:** Entropy as measure of bookmaker uncertainty in sports betting
-2. **Substantive:** Do bookmakers "know" which teams will be relegated early?
-3. **Practical:** Could entropy patterns inform early-season relegation prediction
