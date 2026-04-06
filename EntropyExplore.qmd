@@ -2,7 +2,7 @@
 title: "Entropy Exploration"
 subtitle: "CSAS 2026"
 author: "Naren Prakash"
-format: 
+format:
   html:
     page-width: 90%
     fig-width: 14
@@ -14,6 +14,7 @@ library(tidyverse)
 library(DataExplorer)
 library(implied)
 library(janitor)
+library(brms)
 ```
 ```{r}
 matchweeks <- read_csv("matchweeks.csv")
@@ -455,4 +456,130 @@ bottom_entropy_rolling <- all_results %>%
   )
 
 print(bottom_entropy_rolling)
+```
+
+# Entropy Features for Relegation Modeling
+
+```{r, fig.height=8}
+# Compute per-team entropy features: mean and variance
+team_entropy_features <- team_entropy %>%
+  group_by(team) %>%
+  summarise(
+    mean_entropy = mean(entropy, na.rm = TRUE),
+    var_entropy = var(entropy, na.rm = TRUE),
+    sd_entropy = sd(entropy, na.rm = TRUE),
+    matches = n(),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    final_standings %>% select(team, final_position, final_points, goal_difference),
+    by = "team"
+  ) %>%
+  mutate(
+    relegated = final_position >= 18,
+    relegation_label = case_when(
+      final_position <= 3 ~ "Champions League",
+      final_position <= 6 ~ "Europa League",
+      final_position <= 17 ~ "Mid-table",
+      TRUE ~ "Relegation Zone"
+    ),
+    relegation_label = factor(relegation_label, levels = c("Champions League", "Europa League", "Mid-table", "Relegation Zone"))
+  )
+
+print(team_entropy_features %>% select(team, mean_entropy, var_entropy, final_position, relegated))
+```
+
+```{r, fig.height=8}
+# Mean entropy vs variance, colored by final position
+ggplot(team_entropy_features, aes(x = mean_entropy, y = var_entropy, label = team)) +
+  geom_point(aes(color = relegation_label, size = final_points), alpha = 0.8, stroke = 1.5) +
+  geom_text(vjust = -0.8, hjust = 0.5, size = 4, fontface = "bold") +
+  scale_color_manual(name = "Zone", values = c(
+    "Champions League" = "#27AE60",
+    "Europa League" = "#2ECC71",
+    "Mid-table" = "#3498DB",
+    "Relegation Zone" = "#E74C3C"
+  )) +
+  scale_size(range = c(3, 8), name = "Final Points") +
+  labs(
+    title = "Entropy Mean-Variance Profile - 2004 Season",
+    subtitle = "Relegation candidates cluster by their uncertainty signature",
+    x = "Mean Shannon Entropy (match uncertainty)",
+    y = "Variance of Entropy (consistency)",
+    caption = "High mean + high variance = unpredictable, volatile season"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "bottom"
+  )
+```
+
+```{r, fig.height=7}
+# Compare entropy features for relegated vs non-relegated
+relegation_comparison <- team_entropy_features %>%
+  pivot_longer(
+    cols = c(mean_entropy, var_entropy, sd_entropy),
+    names_to = "metric",
+    values_to = "value"
+  ) %>%
+  mutate(
+    metric = case_when(
+      metric == "mean_entropy" ~ "Mean",
+      metric == "var_entropy" ~ "Variance",
+      metric == "sd_entropy" ~ "Std Dev"
+    )
+  )
+
+ggplot(relegation_comparison, aes(x = relegated, y = value, fill = relegated)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +
+  geom_jitter(width = 0.1, alpha = 0.8, size = 2) +
+  facet_wrap(~metric, scales = "free_y", ncol = 3) +
+  scale_fill_manual(name = "", values = c("TRUE" = "#E74C3C", "FALSE" = "#3498DB"),
+                    labels = c("Relegated", "Safe")) +
+  labs(
+    title = "Entropy Features: Relegated vs Safe Teams",
+    x = "Relegation Status",
+    y = "Value",
+    caption = "2004 Season — 3 teams relegated (positions 18-20)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "top",
+    strip.text = element_text(face = "bold", size = 11)
+  )
+```
+
+```{r, fig.height=8}
+# Lollipop: rank teams by entropy variance
+ggplot(team_entropy_features %>% arrange(desc(var_entropy)),
+       aes(x = reorder(team, var_entropy), y = var_entropy, fill = relegation_label)) +
+  geom_col(alpha = 0.8) +
+  geom_point(aes(color = relegation_label), size = 3) +
+  scale_fill_manual(name = "Zone", values = c(
+    "Champions League" = "#27AE60",
+    "Europa League" = "#2ECC71",
+    "Mid-table" = "#3498DB",
+    "Relegation Zone" = "#E74C3C"
+  )) +
+  scale_color_manual(name = "Zone", values = c(
+    "Champions League" = "#1E8449",
+    "Europa League" = "#196F3D",
+    "Mid-table" = "#21618C",
+    "Relegation Zone" = "#C0392B"
+  )) +
+  coord_flip() +
+  labs(
+    title = "Teams Ranked by Entropy Variance - 2004 Season",
+    subtitle = "Higher variance = more inconsistent match uncertainty",
+    x = "Team",
+    y = "Entropy Variance"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    axis.text.y = element_text(size = 11),
+    legend.position = "bottom"
+  )
 ```

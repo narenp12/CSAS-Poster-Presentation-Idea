@@ -1,0 +1,538 @@
+---
+title: "Bayesian Hierarchical Model of Entropy and Relegation"
+subtitle: "CSAS 2026"
+author: "Naren Prakash"
+format:
+  html:
+    page-width: 90%
+    fig-width: 14
+    fig-height: 8
+---
+
+```{r}
+library(tidyverse)
+library(implied)
+library(janitor)
+library(brms)
+library(patchwork)
+```
+
+```{r}
+games <- read_csv("games.csv", show_col_types = FALSE)
+season_files <- list.files("Seasonal Data", pattern = "Season02.*\\.csv$", full.names = TRUE)
+set.seed(24)
+```
+
+# Power-Transformed Probabilities and Shannon Entropy
+
+```{r}
+# Apply power transformation (Clarke, 2017) to convert raw odds to calibrated probabilities
+odds_input <- games %>% select(B365H, B365D, B365A)
+transformed <- implied_probabilities(odds_input, method = "power")
+prob_df <- data.frame(transformed$probabilities) %>%
+  rename(p_home = B365H, p_draw = B365D, p_away = B365A)
+
+# Compute Shannon entropy from power-transformed probabilities
+# H_i = -sum(p_k * log_3(p_k)) for k in {home, draw, away}
+games_processed <- games %>%
+  bind_cols(prob_df) %>%
+  mutate(
+    entropy = -(p_home * log(p_home, base = 3) +
+                  p_draw * log(p_draw, base = 3) +
+                  p_away * log(p_away, base = 3)),
+    Date = as.Date(Date)
+  )
+
+summary(games_processed$entropy)
+```
+
+```{r, fig.height=7}
+# Histogram of power-transformed entropy values
+ggplot(games_processed, aes(x = entropy)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 40,
+                 fill = "#2C3E50", color = "white", alpha = 0.8) +
+  geom_density(color = "#E74C3C", linewidth = 1.2) +
+  geom_vline(aes(xintercept = mean(entropy)),
+             linetype = "dashed", color = "#E67E22", linewidth = 1) +
+  labs(
+    title = "Distribution of Match-Level Entropy (Power-Transformed Probabilities)",
+    subtitle = paste0("n = ", nrow(games_processed), " matches, mean = ", round(mean(games_processed$entropy), 3)),
+    x = "Shannon Entropy (base 3)",
+    y = "Density",
+    caption = "Dashed line = mean"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "top"
+  )
+```
+
+# Compute Season Standings and Entropy Features
+
+```{r}
+compute_season_standings <- function(season_num) {
+  seasonal_file <- season_files[str_detect(season_files, sprintf("%04d", season_num))]
+  if (length(seasonal_file) == 0) return(NULL)
+  if (!file.exists(seasonal_file)) return(NULL)
+
+  seasonal <- read_csv(seasonal_file, show_col_types = FALSE)
+
+  home <- seasonal %>%
+    select(team = HomeTeam, FTHG, FTAG, FTR) %>%
+    mutate(
+      points = case_when(FTR == "H" ~ 3, FTR == "D" ~ 1, TRUE ~ 0),
+      gd = FTHG - FTAG
+    )
+
+  away <- seasonal %>%
+    select(team = AwayTeam, FTHG, FTAG, FTR) %>%
+    mutate(
+      points = case_when(FTR == "A" ~ 3, FTR == "D" ~ 1, TRUE ~ 0),
+      gd = FTAG - FTHG
+    )
+
+  bind_rows(home, away) %>%
+    group_by(team) %>%
+    summarise(
+      final_points = sum(points),
+      goal_difference = sum(gd),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(final_points), desc(goal_difference)) %>%
+    mutate(
+      final_position = row_number(),
+      relegated = final_position >= 18,
+      season = season_num
+    )
+}
+
+all_standings <- map_dfr(2004:2025, compute_season_standings)
+```
+
+```{r}
+# Compute per-team per-season entropy features from power-transformed data
+team_entropy_all <- games_processed %>%
+  select(team = HomeTeam, Season, entropy) %>%
+  bind_rows(
+    games_processed %>% select(team = AwayTeam, Season, entropy)
+  ) %>%
+  group_by(team, Season) %>%
+  summarise(
+    mean_entropy = mean(entropy, na.rm = TRUE),
+    var_entropy = var(entropy, na.rm = TRUE),
+    sd_entropy = sd(entropy, na.rm = TRUE),
+    matches = n(),
+    .groups = "drop"
+  )
+
+# Merge standings with entropy features
+model_data <- all_standings %>%
+  left_join(team_entropy_all, by = c("team" = "team", "season" = "Season")) %>%
+  drop_na(mean_entropy, var_entropy) %>%
+  mutate(
+    relegated = as.integer(relegated),
+    mean_entropy_z = as.numeric(scale(mean_entropy)),
+    var_entropy_z = as.numeric(scale(var_entropy))
+  )
+
+print(paste("Total team-seasons:", nrow(model_data)))
+print(paste("Relegated:", sum(model_data$relegated), "Non-relegated:", sum(model_data$relegated == 0)))
+print(paste("Seasons:", length(unique(model_data$season))))
+```
+
+```{r, fig.height=7}
+# Entropy profile across all seasons, colored by relegation status
+ggplot(model_data, aes(x = mean_entropy, y = var_entropy)) +
+  geom_point(aes(color = factor(relegated), shape = factor(relegated)),
+             alpha = 0.7, size = 3) +
+  scale_color_manual(name = "Relegated", values = c("0" = "#3498DB", "1" = "#E74C3C"),
+                     labels = c("No", "Yes")) +
+  scale_shape_manual(name = "Relegated", values = c("0" = 16, "1" = 17),
+                     labels = c("No", "Yes")) +
+  labs(
+    title = "Entropy Mean-Variance Profile: All Seasons",
+    subtitle = paste(nrow(model_data), "team-seasons from", length(unique(model_data$season)), "seasons"),
+    x = "Mean Shannon Entropy (power-transformed)",
+    y = "Variance of Entropy"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "bottom"
+  )
+```
+
+# Bayesian Hierarchical Logistic Regression
+
+```{r}
+# Model: Relegation ~ mean_entropy + var_entropy + (1 | season)
+# Varying intercepts by season account for competitive balance differences
+
+model_formula <- bf(relegated ~ mean_entropy_z + var_entropy_z + (1 | season))
+
+model_priors <- c(
+  prior(normal(0, 1.5), class = "b"),      # Population-level effects
+  prior(normal(0, 1), class = "sd"),       # Season-level variation
+  prior(normal(0, 2), class = "Intercept") # Base relegation rate
+)
+
+set.seed(42)
+fit_relegation <- brm(
+  model_formula,
+  data = model_data,
+  family = bernoulli(),
+  prior = model_priors,
+  chains = 4,
+  iter = 4000,
+  warmup = 1000,
+  control = list(adapt_delta = 0.95),
+  seed = 42,
+  file = "fit_bayesian_entropy_relegation"
+)
+
+print(fit_relegation)
+```
+
+```{r, fig.height=10}
+# Posterior density plots for key parameters
+posterior_draws <- posterior_samples(fit_relegation,
+  pars = c("b_mean_entropy_z", "b_var_entropy_z", "b_Intercept")
+)
+
+# Reshape for plotting
+all_long <- posterior_draws %>%
+  pivot_longer(everything(), names_to = "parameter", values_to = "value") %>%
+  mutate(
+    parameter = case_when(
+      parameter == "b_mean_entropy_z" ~ "Mean Entropy",
+      parameter == "b_var_entropy_z" ~ "Entropy Variance",
+      parameter == "b_Intercept" ~ "Intercept"
+    ),
+    parameter = factor(parameter, levels = c("Intercept", "Mean Entropy", "Entropy Variance"))
+  )
+
+# Compute summaries manually
+coef_summary <- all_long %>%
+  group_by(parameter) %>%
+  summarise(
+    median = median(value),
+    lower = quantile(value, 0.025),
+    upper = quantile(value, 0.975),
+    .groups = "drop"
+  )
+
+# Build density plot manually
+density_list <- lapply(unique(all_long$parameter), function(p) {
+  vals <- all_long$value[all_long$parameter == p]
+  d <- density(vals)
+  data.frame(x = d$x, y = d$y, parameter = p)
+})
+
+density_rows <- bind_rows(density_list)
+
+ggplot(density_rows, aes(x = x, y = y, fill = parameter)) +
+  geom_area(alpha = 0.5, color = NA) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.8) +
+  geom_segment(data = coef_summary,
+               aes(x = lower, xend = upper, y = 0, yend = 0),
+               color = "black", linewidth = 1.2) +
+  geom_point(data = coef_summary,
+             aes(x = median, y = 0),
+             color = "black", size = 3, shape = 18) +
+  geom_text(data = coef_summary,
+            aes(x = median, label = sprintf("median: %.2f [%.2f, %.2f]", lower, median, upper), y = -Inf),
+            vjust = -1, size = 3.5, fontface = "bold") +
+  facet_wrap(~parameter, scales = "free", ncol = 1) +
+  scale_fill_manual(values = c(
+    "Intercept" = "#2C3E50",
+    "Mean Entropy" = "#3498DB",
+    "Entropy Variance" = "#E67E22"
+  )) +
+  labs(
+    title = "Posterior Distributions: Relegation Model Coefficients",
+    subtitle = "Standardized predictors (z-scores); dashed line = zero effect; dot = median; bar = 95% CI",
+    x = "Coefficient (log-odds)",
+    y = "Density",
+    fill = ""
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 12)
+  )
+```
+
+```{r}
+# Print coefficient summaries explicitly
+cat("===========================================\n")
+cat("POSTERIOR SUMMARIES: RELEGATION MODEL\n")
+cat("===========================================\n\n")
+
+for (p in c("Mean Entropy", "Entropy Variance", "Intercept")) {
+  row <- coef_summary %>% filter(parameter == p)
+  cat(sprintf("%-20s median: %7.3f | 95%% CI: [%7.3f, %7.3f] | P(>0): %.3f\n",
+    p, row$median, row$lower, row$upper,
+    mean(all_long$value[all_long$parameter == p] > 0)
+  ))
+}
+
+cat("\n===========================================\n")
+cat("INTERPRETATION\n")
+cat("===========================================\n")
+for (p in c("Mean Entropy", "Entropy Variance")) {
+  row <- coef_summary %>% filter(parameter == p)
+  sig <- ifelse(row$lower > 0 || row$upper < 0, "SIGNIFICANT", "NOT significant")
+  cat(sprintf("%s: 95%% CI [%0.3f, %0.3f] — %s\n", p, row$lower, row$upper, sig))
+}
+```
+
+```{r, fig.height=7}
+# Posterior predictive check
+pp_check(fit_relegation, type = "bars", ndraws = 50) +
+  labs(
+    title = "Posterior Predictive Check: Relegation Outcomes",
+    subtitle = "Black = observed data; blue = model posterior predictive distributions"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(face = "bold", size = 16))
+```
+
+```{r, fig.height=8}
+# Season-level varying intercepts
+season_effects <- ranef(fit_relegation)$season[, , "Intercept"] %>%
+  as.data.frame() %>%
+  setNames(c("Estimate", "Est.Error", "Q2.5", "Q97.5")) %>%
+  mutate(season = as.integer(rownames(.))) %>%
+  arrange(season)
+
+ggplot(season_effects, aes(x = season, y = Estimate)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_col(fill = "#2C3E50", alpha = 0.8) +
+  geom_errorbar(aes(ymin = Q2.5, ymax = Q97.5), width = 0.4,
+                color = "#E74C3C", linewidth = 0.8) +
+  scale_x_continuous(breaks = 2004:2025) +
+  coord_flip() +
+  labs(
+    title = "Season-Level Varying Intercepts",
+    subtitle = "Higher = season with higher baseline relegation probability",
+    x = "Season",
+    y = "Intercept (log-odds)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    axis.text.y = element_text(size = 11)
+  )
+```
+
+```{r, fig.height=7}
+# Model convergence diagnostics
+mcmc_plot <- plot(fit_relegation, pars = c("b_mean_entropy_z", "b_var_entropy_z"),
+                  N = 3, ask = FALSE)
+```
+
+```{r, fig.height=7}
+# Conditional effects: probability of relegation vs entropy features
+ce_mean <- conditional_effects(fit_relegation, effects = "mean_entropy_z",
+                                categorical = FALSE)
+ce_var <- conditional_effects(fit_relegation, effects = "var_entropy_z",
+                               categorical = FALSE)
+
+p1 <- plot(ce_mean, points = FALSE, prob = TRUE) +
+  labs(
+    title = "P(Relegation) vs Mean Entropy",
+    x = "Mean Entropy (standardized)",
+    y = "P(Relegation)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+
+p2 <- plot(ce_var, points = FALSE, prob = TRUE) +
+  labs(
+    title = "P(Relegation) vs Entropy Variance",
+    x = "Entropy Variance (standardized)",
+    y = "P(Relegation)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(face = "bold"))
+
+p1 + p2
+```
+
+```{r, fig.height=8}
+# Extract posterior predictions and compare to observed
+model_data_pred <- model_data %>%
+  mutate(
+    predicted_prob = fitted(fit_relegation)[, "Estimate"],
+    predicted_lower = fitted(fit_relegation)[, "Q2.5"],
+    predicted_upper = fitted(fit_relegation)[, "Q97.5"]
+  )
+
+# Calibration plot: observed vs predicted
+calibration_data <- model_data_pred %>%
+  mutate(pred_bin = cut(predicted_prob, breaks = seq(0, 1, 0.1), include.lowest = TRUE)) %>%
+  group_by(pred_bin) %>%
+  summarise(
+    observed_rate = mean(relegated),
+    predicted_rate = mean(predicted_prob),
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  filter(n >= 5)
+
+ggplot(calibration_data, aes(x = predicted_rate, y = observed_rate)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray50", linewidth = 1) +
+  geom_point(aes(size = n), color = "#E74C3C", alpha = 0.7) +
+  geom_errorbar(aes(ymin = observed_rate - 0.1, ymax = observed_rate + 0.1),
+                width = 0.02, color = "#E74C3C") +
+  labs(
+    title = "Model Calibration: Predicted vs Observed Relegation Rates",
+    subtitle = "Points on dashed diagonal = perfect calibration",
+    x = "Predicted P(Relegation)",
+    y = "Observed Relegation Rate"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(face = "bold", size = 16))
+```
+
+# Prior Sensitivity Analysis
+
+```{r}
+# Define three alternative prior specifications
+# 1. Default brms priors (flat-ish)
+priors_default <- c(
+  prior(normal(0, 10), class = "b"),
+  prior(cauchy(0, 5), class = "sd"),
+  prior(normal(0, 5), class = "Intercept")
+)
+
+# 2. Skeptical priors (centered at null, narrow)
+priors_skeptical <- c(
+  prior(normal(0, 0.5), class = "b"),      # Expects small effects
+  prior(normal(0, 0.3), class = "sd"),      # Little season variation
+  prior(normal(0, 1), class = "Intercept")
+)
+
+# 3. Our original weakly informative
+priors_wi <- c(
+  prior(normal(0, 1.5), class = "b"),
+  prior(normal(0, 1), class = "sd"),
+  prior(normal(0, 2), class = "Intercept")
+)
+
+# Fit alternative models (fewer iterations for speed)
+set.seed(43)
+fit_default <- brm(model_formula, data = model_data, family = bernoulli(),
+                   prior = priors_default, chains = 4, iter = 3000, warmup = 500,
+                   seed = 43, file = "fit_sensitivity_default")
+
+set.seed(44)
+fit_skeptical <- brm(model_formula, data = model_data, family = bernoulli(),
+                     prior = priors_skeptical, chains = 4, iter = 3000, warmup = 500,
+                     seed = 44, file = "fit_sensitivity_skeptical")
+```
+
+```{r}
+# Extract posterior summaries for all models
+compare_models <- function(fits, names) {
+  results <- map2_dfr(fits, names, function(fit, nm) {
+    post <- as_draws_df(fit)
+    tibble(
+      model = nm,
+      parameter = c("Mean Entropy", "Entropy Variance", "Intercept"),
+      median = c(
+        median(post$b_mean_entropy_z),
+        median(post$b_var_entropy_z),
+        median(post$b_Intercept)
+      ),
+      lower = c(
+        quantile(post$b_mean_entropy_z, 0.025),
+        quantile(post$b_var_entropy_z, 0.025),
+        quantile(post$b_Intercept, 0.025)
+      ),
+      upper = c(
+        quantile(post$b_mean_entropy_z, 0.975),
+        quantile(post$b_var_entropy_z, 0.975),
+        quantile(post$b_Intercept, 0.975)
+      )
+    )
+  })
+  return(results)
+}
+
+fit_list <- list(fit_relegation, fit_default, fit_skeptical)
+name_list <- c("Weakly Informative", "Flat (Default)", "Skeptical")
+
+sensitivity.results <- compare_models(fit_list, name_list)
+
+cat("\n===========================================\n")
+cat("PRIOR SENSITIVITY COMPARISON\n")
+cat("===========================================\n\n")
+
+for (p in c("Mean Entropy", "Entropy Variance")) {
+  cat(sprintf("\n--- %s ---\n", p))
+  for (nm in name_list) {
+    row <- sensitivity.results %>% filter(model == nm, parameter == p)
+    cat(sprintf("  %-22s median: %6.3f | 95%% CI: [%6.3f, %6.3f]\n",
+      nm, row$median, row$lower, row$upper))
+  }
+}
+```
+
+```{r, fig.height=8}
+# Forest plot comparing all models
+sensitivity.results <- sensitivity.results %>%
+  mutate(model = factor(model, levels = name_list))
+
+ggplot(sensitivity.results %>% filter(parameter != "Intercept"),
+       aes(x = median, y = model)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50", linewidth = 0.8) +
+  geom_errorbarh(aes(xmin = lower, xmax = upper, color = model),
+                 height = 0.2, linewidth = 1) +
+  geom_point(aes(color = model), size = 3) +
+  facet_wrap(~parameter, scales = "free_x", ncol = 1) +
+  scale_color_viridis_d(option = "plasma", end = 0.8) +
+  labs(
+    title = "Prior Sensitivity: Posterior Coefficients Across Prior Choices",
+    subtitle = "Points = posterior median; bars = 95% credible intervals",
+    x = "Coefficient (log-odds)",
+    y = "",
+    color = "Prior"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 12)
+  )
+```
+
+```{r}
+# Quantify sensitivity: range of medians across priors
+sensitivity.range <- sensitivity.results %>%
+  group_by(parameter) %>%
+  summarise(
+    range_median = max(median) - min(median),
+    range_lower = max(lower) - min(lower),
+    range_upper = max(upper) - min(upper),
+    .groups = "drop"
+  )
+
+cat("\n===========================================\n")
+cat("SENSITIVITY METRIC: Range of posterior estimates across priors\n")
+cat("===========================================\n")
+for (p in c("Mean Entropy", "Entropy Variance")) {
+  row <- sensitivity.range %>% filter(parameter == p)
+  cat(sprintf("\n%s:\n", p))
+  cat(sprintf("  Median range across priors:     %0.3f\n", row$range_median))
+  cat(sprintf("  Lower CI range across priors:   %0.3f\n", row$range_lower))
+  cat(sprintf("  Upper CI range across priors:   %0.3f\n", row$range_upper))
+  if (row$range_median < 0.5) {
+    cat("  → ROBUST: Posterior stable across very different priors\n")
+  } else {
+    cat("  → SENSITIVE: Posterior shifts meaningfully with prior choice\n")
+  }
+}
+```
