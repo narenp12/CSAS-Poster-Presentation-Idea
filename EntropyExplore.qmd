@@ -1,0 +1,458 @@
+---
+title: "Entropy Exploration"
+subtitle: "CSAS 2026"
+author: "Naren Prakash"
+format: 
+  html:
+    page-width: 90%
+    fig-width: 14
+    fig-height: 8
+---
+
+```{r}
+library(tidyverse)
+library(DataExplorer)
+library(implied)
+library(janitor)
+```
+```{r}
+matchweeks <- read_csv("matchweeks.csv")
+set.seed(24)
+```
+
+
+```{r}
+# Calculate Shannon entropy for each match
+# H_i = -sum(p_k * log_3(p_k)) for k in {w, d, l}
+calculate_entropy <- function(p_win, p_draw, p_loss) {
+  # Handle zero probabilities to avoid log(0)
+  probs <- c(p_win, p_draw, p_loss)
+  probs <- probs[probs > 0]  # Remove zero probabilities
+  if (length(probs) == 0) return(0)
+  -sum(probs * log(probs, base = 3))
+}
+
+# Vectorized entropy calculation
+calc_entropy_vectorized <- function(p_win, p_draw, p_loss) {
+  entropy <- rep(0, length(p_win))
+  
+  # For home team matches
+  h_mask <- !is.na(p_win) & !is.na(p_draw) & !is.na(p_loss)
+  pw <- p_win[h_mask]
+  pd <- p_draw[h_mask]
+  pl <- p_loss[h_mask]
+  
+  ent <- rep(0, sum(h_mask))
+  if (pw > 0) ent <- ent - pw * log(pw, base = 3)
+  if (pd > 0) ent <- ent - pd * log(pd, base = 3)
+  if (pl > 0) ent <- ent - pl * log(pl, base = 3)
+  
+  entropy[h_mask] <- ent
+  return(entropy)
+}
+
+# Filter for 2004 season
+matchweeks_2004 <- matchweeks %>% 
+  filter(season == 2004)
+
+# Calculate entropy for each match
+matchweeks_2004 <- matchweeks_2004 %>%
+  mutate(
+    entropy = -((b365h * log(b365h, base = 3)) + 
+                  (b365d * log(b365d, base = 3)) + 
+                  (b365a * log(b365a, base = 3)))
+  )
+
+# Create team-level entropy data (both home and away appearances)
+home_entropy <- matchweeks_2004 %>%
+  select(team = home_team, matchweek, entropy) %>%
+  mutate(venue = "Home")
+
+away_entropy <- matchweeks_2004 %>%
+  select(team = away_team, matchweek, entropy) %>%
+  mutate(venue = "Away")
+
+# Combine home and away
+team_entropy <- bind_rows(home_entropy, away_entropy) %>%
+  arrange(team, matchweek)
+
+# Plot entropy for each team across matchweeks (subset for clarity)
+# Show teams in batches to avoid overcrowding
+unique_teams <- sort(unique(team_entropy$team))
+n_teams <- length(unique_teams)
+
+# Split into 2 groups for visibility
+team_groups <- list(
+  team_entropy %>% filter(team %in% unique_teams[1:10]),
+  team_entropy %>% filter(team %in% unique_teams[11:n_teams])
+)
+
+for (i in seq_along(team_groups)) {
+  p <- ggplot(team_groups[[i]], aes(x = matchweek, y = entropy, group = team, color = team)) +
+    geom_line(alpha = 0.8, linewidth = 1) +
+    geom_point(alpha = 0.7, size = 2) +
+    scale_color_viridis_d(option = "plasma") +
+    labs(
+      title = paste0("Match Uncertainty (Shannon Entropy) - 2004 Season (Group ", i, ")"),
+      subtitle = "Entropy calculated from Bet365 bookmaker probabilities",
+      x = "Matchweek",
+      y = "Shannon Entropy (base 3)",
+      color = "Team",
+      caption = "Higher entropy = more uncertain match outcomes"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+      plot.title = element_text(face = "bold", size = 16),
+      panel.grid.minor = element_blank(),
+      legend.position = "bottom"
+    )
+  print(p)
+}
+```
+
+```{r}
+# Alternative: Aggregate entropy by team (mean per matchweek)
+team_entropy_summary <- team_entropy %>%
+  group_by(team, matchweek) %>%
+  summarise(
+    mean_entropy = mean(entropy, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Plot with facets - spread into 4 columns for better visibility
+ggplot(team_entropy_summary, aes(x = matchweek, y = mean_entropy)) +
+  geom_line(color = "#2C3E50", linewidth = 1) +
+  geom_point(color = "#E74C3C", size = 2.5, alpha = 0.8) +
+  facet_wrap(~team, scales = "free_y", ncol = 4) +
+  labs(
+    title = "Average Match Uncertainty by Team - 2004 Season",
+    subtitle = "Mean Shannon entropy per matchweek for each team",
+    x = "Matchweek",
+    y = "Mean Shannon Entropy",
+    caption = "Higher entropy = more uncertain match outcomes"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    strip.text = element_text(face = "bold", size = 11),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12)
+  )
+```
+
+```{r, fig.height=10}
+# Team season-level average entropy
+team_season_avg <- team_entropy %>%
+  group_by(team) %>%
+  summarise(
+    avg_entropy = mean(entropy, na.rm = TRUE),
+    matches = n(),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(avg_entropy))
+
+# Bar plot of average entropy by team - larger for visibility
+ggplot(team_season_avg, aes(x = reorder(team, avg_entropy), y = avg_entropy)) +
+  geom_col(aes(fill = avg_entropy), show.legend = FALSE) +
+  scale_fill_viridis_c(option = "magma") +
+  coord_flip() +
+  labs(
+    title = "Average Match Uncertainty by Team - 2004 Season",
+    subtitle = "Season-long average Shannon entropy",
+    x = "Team",
+    y = "Average Shannon Entropy",
+    caption = "Higher entropy = more uncertain matches on average"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    axis.title = element_text(size = 14)
+  )
+```
+
+```{r, fig.height=8}
+# Calculate end-of-season standings from match results
+# For each match, compute points: Win=3, Draw=1, Loss=0
+# Use goal difference as tiebreaker
+
+# Load seasonal data for goals
+seasonal_2004 <- read_csv("Seasonal Data/Season02004.csv")
+
+# Compute standings with goals
+# Home team results
+home_results <- seasonal_2004 %>%
+  select(team = HomeTeam, FTHG, FTAG, FTR) %>%
+  mutate(
+    points = case_when(
+      FTR == "H" ~ 3,
+      FTR == "D" ~ 1,
+      FTR == "A" ~ 0
+    ),
+    goal_diff = FTHG - FTAG
+  ) %>%
+  select(team, points, goal_diff)
+
+# Away team results
+away_results <- seasonal_2004 %>%
+  select(team = AwayTeam, FTHG, FTAG, FTR) %>%
+  mutate(
+    points = case_when(
+      FTR == "A" ~ 3,
+      FTR == "D" ~ 1,
+      FTR == "H" ~ 0
+    ),
+    goal_diff = FTAG - FTHG
+  ) %>%
+  select(team, points, goal_diff)
+
+# Combine and compute final standings
+final_standings <- bind_rows(home_results, away_results) %>%
+  group_by(team) %>%
+  summarise(
+    final_points = sum(points),
+    goal_difference = sum(goal_diff),
+    .groups = "drop"
+  ) %>%
+  # Rank by points first, then goal difference as tiebreaker
+  arrange(desc(final_points), desc(goal_difference)) %>%
+  mutate(
+    final_position = row_number()
+  )
+
+# Merge with entropy data
+team_entropy_summary <- team_entropy %>%
+  group_by(team) %>%
+  summarise(
+    avg_entropy = mean(entropy, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+final_standings <- final_standings %>%
+  left_join(team_entropy_summary, by = "team")
+
+print("Final League Table - 2004 Season:")
+print(final_standings %>% 
+  select(Position = final_position, Team = team, Points = final_points, GD = goal_difference, Avg_Entropy = avg_entropy) %>%
+  arrange(Position))
+```
+
+```{r, fig.height=7}
+# Empirical histogram of match-level entropy values (2004 season)
+ggplot(matchweeks_2004, aes(x = entropy)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    bins = 30,
+    fill = "#2C3E50",
+    color = "white",
+    alpha = 0.8
+  ) +
+  geom_density(color = "#E74C3C", linewidth = 1.2, alpha = 0.8) +
+  geom_vline(
+    aes(xintercept = mean(entropy), color = "Mean"),
+    linetype = "dashed",
+    linewidth = 1
+  ) +
+  scale_color_manual(name = "", values = c("Mean" = "#E67E22")) +
+  labs(
+    title = "Distribution of Match-Level Entropy - 2004 Season",
+    subtitle = paste0("n = ", nrow(matchweeks_2004), " matches"),
+    x = "Shannon Entropy (base 3)",
+    y = "Density",
+    caption = "Higher entropy = more uncertain match outcomes"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "top"
+  )
+```
+
+```{r, fig.height=8}
+# Scatter plot: Average Entropy vs Final Position
+ggplot(final_standings, aes(x = final_position, y = avg_entropy, label = team)) +
+  geom_point(aes(size = final_points, color = avg_entropy), alpha = 0.8, stroke = 1.5) +
+  geom_text(vjust = -0.8, hjust = 0.5, size = 4, fontface = "bold") +
+  scale_color_viridis_c(option = "magma") +
+  scale_size(range = c(3, 8), name = "Final Points") +
+  scale_x_reverse(breaks = 1:20) +
+  labs(
+    title = "Entropy vs Final League Position - 2004 Season",
+    subtitle = "Position determined by total points; color shows average match uncertainty",
+    x = "Final League Position (1 = Champion)",
+    y = "Average Shannon Entropy",
+    caption = "Top-left: High-performing teams with predictable matches | Bottom-right: Low-performing teams with uncertain matches"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+```
+
+```{r, fig.height=8}
+# Scatter plot: Average Entropy vs Final Points (more direct relationship)
+ggplot(final_standings, aes(x = avg_entropy, y = final_points, label = team)) +
+  geom_point(aes(color = final_position), size = 4, alpha = 0.8, stroke = 1.5) +
+  geom_text(vjust = -0.8, hjust = 0.5, size = 4, fontface = "bold") +
+  scale_color_viridis_c(option = "plasma", direction = -1, name = "Final Position") +
+  geom_smooth(method = "lm", color = "#2C3E50", linetype = "dashed", alpha = 0.6) +
+  labs(
+    title = "Match Uncertainty vs Season Performance - 2004 Season",
+    subtitle = "Does higher entropy correlate with lower points?",
+    x = "Average Shannon Entropy",
+    y = "Final Season Points",
+    caption = "Dashed line: Linear trend"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+```
+
+```{r, fig.height=10}
+# Rolling cumulative points vs cumulative entropy over matchweeks (for top 6 teams)
+# Need to compute cumulative standings with goals from seasonal data
+
+# Join matchweeks with seasonal data to get goals per match
+matchweeks_goals <- matchweeks_2004 %>%
+  select(date, home_team, away_team, matchweek) %>%
+  left_join(
+    seasonal_2004 %>% 
+      mutate(Date = as.Date(Date, format = "%d/%m/%y")) %>%
+      select(Date, HomeTeam, AwayTeam, FTHG, FTAG),
+    by = join_by(date == Date, home_team == HomeTeam, away_team == AwayTeam)
+  )
+
+# Compute cumulative results per matchweek
+home_cum <- matchweeks_goals %>%
+  select(team = home_team, matchweek, FTHG, FTAG) %>%
+  mutate(
+    points = case_when(FTHG > FTAG ~ 3, FTHG == FTAG ~ 1, TRUE ~ 0),
+    gd = FTHG - FTAG
+  )
+
+away_cum <- matchweeks_goals %>%
+  select(team = away_team, matchweek, FTHG, FTAG) %>%
+  mutate(
+    points = case_when(FTAG > FTHG ~ 3, FTAG == FTHG ~ 1, TRUE ~ 0),
+    gd = FTAG - FTHG
+  )
+
+all_results <- bind_rows(home_cum, away_cum) %>%
+  arrange(team, matchweek) %>%
+  group_by(team) %>%
+  mutate(
+    cumulative_points = cumsum(points),
+    cumulative_gd = cumsum(gd)
+  ) %>%
+  ungroup()
+
+# Add entropy to all_results
+all_results <- all_results %>%
+  left_join(
+    team_entropy %>% select(team, matchweek, entropy),
+    by = c("team", "matchweek")
+  ) %>%
+  group_by(team) %>%
+  mutate(cumulative_entropy = cumsum(entropy)) %>%
+  ungroup()
+
+top_6_teams <- final_standings %>%
+  arrange(final_position) %>%
+  slice(1:6) %>%
+  pull(team)
+
+rolling_plot <- all_results %>%
+  filter(team %in% top_6_teams) %>%
+  ggplot(aes(x = matchweek)) +
+  geom_line(aes(y = cumulative_points, color = team, group = team), linewidth = 1.2) +
+  geom_point(aes(y = cumulative_points, color = team), size = 2) +
+  scale_color_viridis_d(option = "plasma") +
+  labs(
+    title = "Cumulative Season Points - Top 6 Teams (2004 Season)",
+    x = "Matchweek",
+    y = "Cumulative Points",
+    color = "Team"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "bottom"
+  )
+
+print(rolling_plot)
+
+# Same for entropy
+entropy_rolling <- all_results %>%
+  filter(team %in% top_6_teams) %>%
+  ggplot(aes(x = matchweek, y = cumulative_entropy, color = team, group = team)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  scale_color_viridis_d(option = "plasma") +
+  labs(
+    title = "Cumulative Entropy - Top 6 Teams (2004 Season)",
+    x = "Matchweek",
+    y = "Cumulative Shannon Entropy",
+    color = "Team"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "bottom"
+  )
+
+print(entropy_rolling)
+
+# Bottom 6 teams cumulative points
+bottom_6_teams <- final_standings %>%
+  arrange(desc(final_position)) %>%
+  slice(1:6) %>%
+  pull(team)
+
+bottom_rolling_plot <- all_results %>%
+  filter(team %in% bottom_6_teams) %>%
+  ggplot(aes(x = matchweek)) +
+  geom_line(aes(y = cumulative_points, color = team, group = team), linewidth = 1.2) +
+  geom_point(aes(y = cumulative_points, color = team), size = 2) +
+  scale_color_viridis_d(option = "magma") +
+  labs(
+    title = "Cumulative Season Points - Bottom 6 Teams (2004 Season)",
+    x = "Matchweek",
+    y = "Cumulative Points",
+    color = "Team"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "bottom"
+  )
+
+print(bottom_rolling_plot)
+
+# Bottom 6 teams cumulative entropy
+bottom_entropy_rolling <- all_results %>%
+  filter(team %in% bottom_6_teams) %>%
+  ggplot(aes(x = matchweek, y = cumulative_entropy, color = team, group = team)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  scale_color_viridis_d(option = "magma") +
+  labs(
+    title = "Cumulative Entropy - Bottom 6 Teams (2004 Season)",
+    x = "Matchweek",
+    y = "Cumulative Shannon Entropy",
+    color = "Team"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "bottom"
+  )
+
+print(bottom_entropy_rolling)
+```

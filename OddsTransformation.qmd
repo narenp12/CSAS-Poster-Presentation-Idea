@@ -132,3 +132,16 @@ ggplot(inspect_long_with_results, aes(x = date, y = betting_odds, color = odds_t
 predictions <- inspect_long %>% group_by(date, season, home_team, away_team) %>% summarize(betting_odds = max(betting_odds)) %>% ungroup() %>% left_join(inspect_long) %>% mutate(odds_type = toupper(str_remove_all(odds_type, "^b365")))
 print(mean(predictions$odds_type == predictions$result))
 ```
+
+
+```{r}
+matchweeks <- inspect_set %>%
+  mutate(date = as.Date(date)) %>%
+  group_by(season) %>%
+  mutate(matchweek = as.integer(difftime(date, min(date), units = "weeks")) + 1) %>%
+  ungroup()
+```
+
+```{r}
+write_csv(matchweeks, "matchweeks.csv")
+```

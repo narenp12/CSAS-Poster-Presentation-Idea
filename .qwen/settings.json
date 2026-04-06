@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(quarto *)",
+      "Bash(tr *)",
+      "Bash(rscript *)"
+    ]
+  },
+  "$version": 3
+}
