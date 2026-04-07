@@ -19,17 +19,17 @@ format: html
 
 ## Match-Level Observations
 
--   Match $i$ in season $t$ between home team $h$ and away team $a$
+-   Match $i$ in season $s$ between home team $h$ and away team $a$
 -   Bookmaker probabilities from Bet365 odds (power transformation)
-  - Clarke(2017) and implied R package for transformation
--   Probability vector: $p_i = (p_{i,w}, p_{i,d}, p_{i,l})$
+  - Buchdahl (2019) power / logarithmic method via `implied` R package
+-   Probability vector: $p_{i,s} = (p_{i,w}, p_{i,d}, p_{i,l})$
     -   $p_{i,w}$ = probability of home win
     -   $p_{i,d}$ = probability of draw
     -   $p_{i,l}$ = probability of away win (home loss)
 
 ## Relegation Outcome
 
--   $Y_{c,t} \in \{0, 1\}$ = 1 if team $c$ is relegated at the end of season $t$
+-   $Y_{c,s} \in \{0, 1\}$ = 1 if team $c$ is relegated at the end of season $s$
 
 **Key design choice:** The model uses only information available *during* the season (rolling entropy) to predict an outcome realized *after* the season ends. Relegation status is the target variable
 
@@ -39,9 +39,9 @@ format: html
 
 ## Definition
 
-For match $i$, entropy of the bookmaker probability distribution:
+For match $i$ in season $s$, entropy of the bookmaker probability distribution:
 
-$$H_i = -\sum_{k \in \{w,d,l\}} p_{i,k} \log_3(p_{i,k})$$
+$$H_{i,s} = -\sum_{k \in \{w,d,l\}} p_{i,s,k} \log_3(p_{i,s,k})$$
 
 ------------------------------------------------------------------------
 
