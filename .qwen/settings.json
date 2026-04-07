@@ -3,7 +3,10 @@
     "allow": [
       "Bash(quarto *)",
       "Bash(tr *)",
-      "Bash(rscript *)"
+      "Bash(rscript *)",
+      "Bash(diff)",
+      "Bash(head *)",
+      "Bash(rm *)"
     ]
   },
   "$version": 3
