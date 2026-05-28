@@ -2,7 +2,7 @@
 
 Bayesian hierarchical analysis of Shannon entropy from bookmaker odds.
 
-Presented at the Connecticut Sports Analytics Symposium (CSAS) 2026.
+Produced for the Connecticut Sports Analytics Symposium (CSAS) 2026.
 
 ## The idea
 
