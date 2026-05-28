@@ -1,54 +1,64 @@
 # Premier League Match Uncertainty as a Relegation Signal
 
-**A Bayesian Hierarchical Analysis of Shannon Entropy from Bookmaker Odds**
+Bayesian hierarchical analysis of Shannon entropy from bookmaker odds.
 
 Presented at the Connecticut Sports Analytics Symposium (CSAS) 2026.
 
-## Overview
+## The idea
 
-Can the uncertainty implied by betting markets predict which teams get relegated? This project tests whether **Shannon entropy** — a measure of match-level uncertainty derived from Bet365 odds — serves as a predictive signal for relegation in the English Premier League.
+Bookmakers set odds that reflect match uncertainty. If a team's matches are consistently hard to call — high uncertainty week after week — maybe that tells us something about their quality. I tested this by pulling 22 seasons of Premier League Bet365 odds, converting them to probabilities, measuring each match's Shannon entropy, and feeding team-level entropy features into a Bayesian logistic regression to predict relegation.
 
-Using a Bayesian hierarchical logistic regression across 22 seasons (2004–2025), I find that a one-standard-deviation increase in a team's average match entropy raises the odds of relegation by approximately **55%**, with a 100% posterior probability of a positive effect. The result is robust across multiple prior specifications.
+Main finding: a one-standard-deviation bump in average match entropy raises relegation odds by about 55%, with a 100% posterior probability of a positive effect. It holds up across different priors too.
 
-## Structure
+## Project layout
 
 ```
 ├── data/
-│   ├── raw/              # Bet365 odds, match results, seasonal standings
-│   └── processed/        # Fitted Bayesian models (.rds)
-├── notebooks/            # Reproducible analysis pipeline (Quarto)
+│   ├── raw/              Bet365 odds, match results, 22 seasons of standings
+│   └── processed/        Fitted models (.rds)
+├── notebooks/            Quarto pipeline, runnable top to bottom
 │   ├── 01-data-exploration/
 │   ├── 02-odds-transformation/
 │   ├── 03-entropy-exploration/
 │   └── 04-bayesian-model/
-├── poster/               # CSAS conference poster
-├── paper/                # Working paper + references
-└── theory/               # Theoretical background
+├── poster/               CSAS conference poster
+├── paper/                Working paper + references
+└── theory/               Background reading
 ```
 
 ## Pipeline
 
-| Step | Notebook | What it does |
+| Step | Notebook | What happens |
 |------|----------|-------------|
-| 1 | `01-data-exploration` | Cleans 22 seasons of EPL match data into a team-level panel |
-| 2 | `02-odds-transformation` | Converts raw bookmaker odds to calibrated probabilities (power method) |
-| 3 | `03-entropy-exploration` | Computes Shannon entropy per match, visualizes team-level patterns |
-| 4 | `04-bayesian-model` | Fits hierarchical logistic regression; posterior analysis + sensitivity checks |
+| 1 | data-exploration | Clean 22 seasons of EPL data into a team-level panel |
+| 2 | odds-transformation | Convert raw odds to probabilities using the power method (Buchdahl 2019) via the `implied` package |
+| 3 | entropy-exploration | Compute Shannon entropy per match, visualize patterns across teams and seasons |
+| 4 | bayesian-model | Fit the hierarchical model, inspect posteriors, check prior sensitivity |
 
-## Methods
+## Model
 
-- **Data**: Bet365 odds for 5,860 EPL matches across 22 seasons
-- **Probability calibration**: Power transformation (Buchdahl, 2019) via the `implied` R package — removes bookmaker overround while preserving relative odds structure
-- **Entropy**: Per-match Shannon entropy $H_i = -\sum_{k} p_k \log_3 p_k$ (base 3 normalizes to $[0,1]$), then aggregated to team-season mean and variance
-- **Model**: Bayesian hierarchical logistic regression (`brms`/Stan):
-  - $\text{logit}(p_{c,s}) = \alpha + \beta_1 \bar{H}_{c,s} + \beta_2 \text{Var}(H)_{c,s} + \gamma_s$
-  - $\gamma_s \sim \mathcal{N}(0, \sigma_{\text{season}})$ — partial pooling across seasons
-  - Weakly informative priors: $\mathcal{N}(0, 1.5)$ for slopes, $\mathcal{N}^+(0, 1)$ for season variance
+Outcome is binary: did a team get relegated in season s? (1 = yes)
+
+The model pools information across seasons with a random intercept:
+
+```
+relegated ~ Bernoulli(p)
+
+logit(p) = intercept + b1 * mean_entropy + b2 * entropy_variance + season_effect
+
+season_effect ~ Normal(0, sigma_season)
+```
+
+Priors are weakly informative — meant to regularize, not drive results:
+
+- b1, b2 ~ Normal(0, 1.5) — allows moderate effects on the logit scale
+- sigma_season ~ Normal+(0, 1) — season-to-season variation shouldn't be huge
+- intercept ~ Normal(0, 2) — covers plausible baseline relegation rates
 
 ## Tools
 
-R • Quarto • brms (Stan) • tidyverse • posterdown
+R, Quarto, brms (Stan backend), tidyverse, posterdown.
 
 ## Author
 
-**Naren Prakash** — naren.prakash@uconn.edu
+Naren Prakash — naren.prakash@uconn.edu
