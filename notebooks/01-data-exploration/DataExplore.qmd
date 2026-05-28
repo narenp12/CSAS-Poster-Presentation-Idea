@@ -11,12 +11,12 @@ library(DataExplorer)
 library(janitor)
 ```
 ```{r}
-files <- list.files("Seasonal Data", full.names = TRUE)
+files <- list.files("../../data/raw/seasonal", full.names = TRUE)
 full_data <- sapply(files, read_csv)
 ```
 
 ```{r}
-s04_sub <- full_data$`Seasonal Data/Season02004.csv`
+s04_sub <- full_data$`../../data/raw/seasonal/Season02004.csv`
 # DataExplorer::create_report(s04_sub)
 ```
 ## Season 2004 subset, Bet365 odds and NO Asian handicap, example cleaning and mutation
@@ -96,12 +96,12 @@ head(team_level)
 ```
 
 ```{r}
-promoted <- read_csv("promoted.csv") %>% clean_names()
+promoted <- read_csv("../../data/raw/promoted.csv") %>% clean_names()
 promoted$season <- promoted$season + 1
 team_level <- team_level %>% left_join(promoted)
 ```
 ```{r}
-relegated <- read_csv("relegated.csv") %>%
+relegated <- read_csv("../../data/raw/relegated.csv") %>%
   clean_names() %>%
   filter(season >= 2004)
 team_level <- team_level %>% left_join(relegated)
@@ -113,6 +113,6 @@ team_level$relegated[is.na(team_level$relegated)] <- FALSE
 team_level %>% filter(season == 2004)
 ```
 ```{r}
-write_csv(games, "games.csv")
-write_csv(team_level, "team_data.csv")
+write_csv(games, "../../data/raw/games.csv")
+write_csv(team_level, "../../data/raw/team_data.csv")
 ```

@@ -18,8 +18,8 @@ library(patchwork)
 ```
 
 ```{r}
-games <- read_csv("games.csv", show_col_types = FALSE)
-season_files <- list.files("Seasonal Data", pattern = "Season02.*\\.csv$", full.names = TRUE)
+games <- read_csv("../../data/raw/games.csv", show_col_types = FALSE)
+season_files <- list.files("../../data/raw/seasonal", pattern = "Season02.*\\.csv$", full.names = TRUE)
 set.seed(24)
 ```
 

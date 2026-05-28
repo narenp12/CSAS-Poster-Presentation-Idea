@@ -17,7 +17,7 @@ library(janitor)
 library(brms)
 ```
 ```{r}
-matchweeks <- read_csv("matchweeks.csv")
+matchweeks <- read_csv("../../data/raw/matchweeks.csv")
 set.seed(24)
 ```
 
@@ -180,7 +180,7 @@ ggplot(team_season_avg, aes(x = reorder(team, avg_entropy), y = avg_entropy)) +
 # Use goal difference as tiebreaker
 
 # Load seasonal data for goals
-seasonal_2004 <- read_csv("Seasonal Data/Season02004.csv")
+seasonal_2004 <- read_csv("../../data/raw/seasonal/Season02004.csv")
 
 # Compute standings with goals
 # Home team results

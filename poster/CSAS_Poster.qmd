@@ -3,10 +3,12 @@ title: "Premier League Match Uncertainty as a Relegation Signal"
 subtitle: "A Bayesian Hierarchical Analysis of Shannon Entropy from Bookmaker Odds"
 author:
   - name: Naren Prakash
-output:
-  posterdown::posterdown_html:
-    self_contained: true
-    number_sections: false
+format:
+  html:
+    theme: cosmo
+    css: "poster_style.css"
+    toc: false
+    number-sections: false
 ---
 
 ```{r setup, include=FALSE}
@@ -19,51 +21,65 @@ library(patchwork)
 
 # Research Question
 
-**Goal:** Test if match-level entropy predicts relegation beyond bookmaker probabilities.
+**Goal:** Determine whether match-level uncertainty (entropy) contains predictive signal for relegation outcomes, beyond what is captured by bookmaker probabilities alone.
 
-**Hypothesis:** Higher team-level entropy leads to higher relegation probability.
+**Hypothesis:** Higher average match uncertainty (entropy) for a team during the season is associated with a higher probability of relegation, controlling for other factors.
 
-**Approach:** Bayesian hierarchical logistic regression with entropy features from calibrated odds, pooling across 22 seasons (2004–2025).
+**Approach:** Construct entropy features from calibrated bookmaker odds for each team each season, then use a Bayesian hierarchical logistic regression to predict eventual relegation, pooling across teams and seasons.
 
 # Data & Notation
 
-- **Match** $i$, **season** $s$, teams $h$ (home) vs $a$ (away)
-- **Calibrated probabilities**: $p_{i,s} = (p_{w}, p_{d}, p_{l})$ via Buchdahl (2019) power method (`implied` package)
-- **Outcome**: $Y_{c,s} \in \{0, 1\}$ (1 = relegated)
+- **Match** $i$ in **season** $s$ between home team $h$ and away team $a$
+- **Power-transformed** Bet365 probabilities: $p_{i,s} = (p_{i,w}, p_{i,d}, p_{i,l})$
+  - Buchdahl (2019) power / logarithmic method via `implied` R package
+  - Alternative methods available: additive, Shin's, multiplicative
+- **Relegation outcome**: $Y_{c,s} \in \{0, 1\}$ = 1 if team $c$ is relegated at end of season $s$
 
-**Data**: Bet365 odds, EPL 2004–2025 (22 seasons). Model uses in-season data only.
+**Note:** The model uses only information available *during* the season to predict an outcome realized *after* the season ends.
+
+| Detail | Value |
+|--------|-------|
+| Source | Bet365 odds, English Premier League |
+| Seasons | 2004–2025 (22 seasons) |
 
 # Shannon Entropy
 
+For match $i$ in season $s$:
+
 $$H_{i,s} = -\sum_{k \in \{w,d,l\}} p_{i,s,k} \log_3(p_{i,s,k})$$
 
-Base-3 log normalizes to $[0, 1]$: 0 = certain, 1 = maximum uncertainty.
+Base-3 log normalizes entropy to $[0, 1]$: 0 = perfectly predictable, 1 = maximum uncertainty.
 
-# Team-Level Features
+# Team-Level Entropy Features
 
-| Feature | Formula |
-|---------|---------|
+For each team $c$ in each season $s$:
+
+| Feature | Definition |
+|---------|-----------|
 | Mean entropy | $\bar{H}_{c,s} = \frac{1}{N}\sum_i H_{i,s}$ |
 | Entropy variance | $\text{Var}(H)_{c,s} = \frac{1}{N-1}\sum_i (H_{i,s} - \bar{H}_{c,s})^2$ |
 
 # Bayesian Hierarchical Model
 
-$$Y_{c,s} \sim \text{Bernoulli}(p_{c,s}), \quad \text{logit}(p_{c,s}) = \alpha + \beta_1 \bar{H}_{c,s} + \beta_2 \text{Var}(H)_{c,s} + \gamma_s$$
+$$Y_{c,s} \sim \text{Bernoulli}(p_{c,s})$$
+
+$$\text{logit}(p_{c,s}) = \alpha + \beta_1 \cdot \bar{H}_{c,s} + \beta_2 \cdot \text{Var}(H)_{c,s} + \gamma_s$$
+
 $$\gamma_s \sim \mathcal{N}(0, \sigma_{\text{season}})$$
 
-**Priors** (standardized predictors):
+**Priors** (predictors standardized to z-scores):
 
-| Parameter | Prior | Rationale |
-|-----------|-------|-----------|
-| $\beta_1, \beta_2$ | $\mathcal{N}(0, 1.5)$ | Weakly informative; allows moderate effects |
-| $\sigma_{\text{season}}$ | $\mathcal{N}^+(0, 1)$ | Half-normal; modest season variation |
-| $\alpha$ | $\mathcal{N}(0, 2)$ | Covers 2%–65% relegation prob. (true rate = 15%) |
+| Parameter | Prior | Justification |
+|-----------|-------|---------------|
+| $\beta_1, \beta_2$ | $\mathcal{N}(0, 1.5)$ | Weakly informative; 1.5 on logit shifts probability from ~15% to ~50% |
+| $\sigma_{\text{season}}$ | $\mathcal{N}^+(0, 1)$ | Half-normal; modest season-to-season variation expected |
+| $\alpha$ | $\mathcal{N}(0, 2)$ | Covers 2%–65% relegation probability at 95% (true rate = 15%) |
 
 # Data Summary
 
 ```{r}
-games <- read_csv("games.csv", show_col_types = FALSE)
-season_files <- list.files("Seasonal Data", pattern = "Season02.*\\.csv$", full.names = TRUE)
+games <- read_csv("../data/raw/games.csv", show_col_types = FALSE)
+season_files <- list.files("../data/raw/seasonal", pattern = "Season02.*\\.csv$", full.names = TRUE)
 
 odds_input <- games %>% select(B365H, B365D, B365A)
 transformed <- implied_probabilities(odds_input, method = "power")
@@ -87,16 +103,17 @@ ggplot(games_proc, aes(x = entropy)) +
   geom_vline(aes(xintercept = mean(entropy)),
              linetype = "dashed", color = "#E67E22", linewidth = 1.2) +
   labs(
-    title = "Entropy Distribution",
-    subtitle = sprintf("n = %d | mean = %.3f", nrow(games_proc), mean(games_proc$entropy)),
-    x = "Shannon Entropy", y = "Density"
+    title = "Match-Level Entropy Distribution",
+    subtitle = sprintf("n = %d matches | mean = %.3f",
+                       nrow(games_proc), mean(games_proc$entropy)),
+    x = "Shannon Entropy (base 3)", y = "Density"
   ) +
   theme_minimal(base_size = 13) +
   theme(plot.title = element_text(face = "bold", size = 14),
         axis.title = element_text(size = 12), axis.text = element_text(size = 11))
 ```
 
-# Entropy Profile
+# Mean-Variance Profile
 
 ```{r}
 compute_standings <- function(season_num) {
@@ -138,34 +155,41 @@ md_sample <- md %>% filter(season %in% sample_seasons) %>%
 
 ```{r, fig.height=5}
 ggplot(md_sample, aes(x = mean_H, y = var_H)) +
-  geom_point(aes(color = zone), alpha = 0.8, size = 3, stroke = 2) +
-  geom_text(aes(label = team, color = zone), size = 3, vjust = -1, hjust = 0.5, fontface = "bold") +
+  geom_point(aes(color = zone), alpha = 0.8, size = 3.5, stroke = 2) +
+  geom_text(aes(label = team, color = zone), size = 3.5, vjust = -1, hjust = 0.5, fontface = "bold") +
   scale_color_manual(name = "Zone", values = c(
     "Champions League" = "#27AE60", "Europa League" = "#2ECC71",
     "Mid-table" = "#3498DB", "Relegation Zone" = "#E74C3C"
   )) +
   facet_wrap(~season, ncol = 3) +
-  labs(title = "Entropy: Mean vs Variance", x = "Mean", y = "Variance") +
+  labs(title = "Entropy Mean-Variance Profile (Sample Seasons)",
+       x = "Mean Entropy", y = "Entropy Variance") +
   theme_minimal(base_size = 13) +
   theme(plot.title = element_text(face = "bold", size = 14),
         axis.title = element_text(size = 12), axis.text = element_text(size = 11),
         legend.position = "bottom", strip.text = element_text(face = "bold", size = 12))
 ```
 
-# Relegated vs Safe
+# Relegated vs Safe Teams
 
 ```{r, fig.height=5}
 md_long <- md_sample %>%
-  mutate(relegated_label = factor(ifelse(relegated, "Relegated", "Safe"), levels = c("Safe", "Relegated"))) %>%
-  pivot_longer(cols = c(mean_H, var_H), names_to = "metric", values_to = "value") %>%
-  mutate(metric = ifelse(metric == "mean_H", "Mean", "Variance"))
+  mutate(relegated_label = ifelse(relegated, "Relegated", "Safe"),
+         relegated_label = factor(relegated_label, levels = c("Safe", "Relegated"))) %>%
+  pivot_longer(
+    cols = c(mean_H, var_H),
+    names_to = "metric", values_to = "value"
+  ) %>%
+  mutate(metric = case_when(
+    metric == "mean_H" ~ "Mean Entropy", metric == "var_H" ~ "Entropy Variance"
+  ))
 
 ggplot(md_long, aes(x = relegated_label, y = value, fill = relegated_label)) +
   geom_boxplot(alpha = 0.7, outlier.shape = NA, linewidth = 1) +
   geom_jitter(width = 0.15, alpha = 0.6, size = 2) +
   facet_grid(metric ~ season, scales = "free_y") +
-  scale_fill_manual(values = c("Safe" = "#3498DB", "Relegated" = "#E74C3C")) +
-  labs(title = "Entropy by Relegation Status", x = "", y = "") +
+  scale_fill_manual(name = "", values = c("Safe" = "#3498DB", "Relegated" = "#E74C3C")) +
+  labs(title = "Entropy Features: Relegated vs Safe Teams", x = "", y = "") +
   theme_minimal(base_size = 13) +
   theme(plot.title = element_text(face = "bold", size = 14),
         axis.text = element_text(size = 11), legend.position = "none",
@@ -175,7 +199,7 @@ ggplot(md_long, aes(x = relegated_label, y = value, fill = relegated_label)) +
 # Posterior Results
 
 ```{r}
-fit <- readRDS("fit_bayesian_entropy_relegation.rds")
+fit <- readRDS("../data/processed/fit_bayesian_entropy_relegation.rds")
 post <- as_draws_df(fit)
 ```
 
@@ -190,7 +214,8 @@ coef_df <- tibble(
 
 knitr::kable(coef_df, digits = 3,
              col.names = c("Parameter", "Median", "2.5%", "97.5%", "P(>0)"),
-             caption = "Posterior Summaries", booktabs = TRUE)
+             caption = "Posterior Summaries (standardized predictors)",
+             booktabs = TRUE)
 ```
 
 # Posterior Distributions
@@ -215,7 +240,7 @@ p1 <- ggplot(all_long %>% filter(parameter == "Mean Entropy"), aes(x = value)) +
   geom_histogram(bins = 50, fill = "#3498DB", color = "white", alpha = 0.85) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray40", linewidth = 1) +
   geom_vline(xintercept = cs$med[cs$parameter == "Mean Entropy"], color = "black", linewidth = 1.5) +
-  labs(title = "Mean Entropy", x = "Coefficient", y = "Count") +
+  labs(title = "Mean Entropy", x = "Coefficient (log-odds)", y = "Count") +
   theme_minimal(base_size = 13) +
   theme(plot.title = element_text(face = "bold", size = 14),
         axis.title = element_text(size = 11), axis.text = element_text(size = 10))
@@ -224,7 +249,7 @@ p2 <- ggplot(all_long %>% filter(parameter == "Entropy Variance"), aes(x = value
   geom_histogram(bins = 50, fill = "#E67E22", color = "white", alpha = 0.85) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray40", linewidth = 1) +
   geom_vline(xintercept = cs$med[cs$parameter == "Entropy Variance"], color = "black", linewidth = 1.5) +
-  labs(title = "Entropy Variance", x = "Coefficient", y = "Count") +
+  labs(title = "Entropy Variance", x = "Coefficient (log-odds)", y = "Count") +
   theme_minimal(base_size = 13) +
   theme(plot.title = element_text(face = "bold", size = 14),
         axis.title = element_text(size = 11), axis.text = element_text(size = 10))
@@ -233,7 +258,7 @@ p3 <- ggplot(all_long %>% filter(parameter == "Intercept"), aes(x = value)) +
   geom_histogram(bins = 50, fill = "#2C3E50", color = "white", alpha = 0.85) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray40", linewidth = 1) +
   geom_vline(xintercept = cs$med[cs$parameter == "Intercept"], color = "black", linewidth = 1.5) +
-  labs(title = "Intercept", x = "Coefficient", y = "Count") +
+  labs(title = "Intercept", x = "Coefficient (log-odds)", y = "Count") +
   theme_minimal(base_size = 13) +
   theme(plot.title = element_text(face = "bold", size = 14),
         axis.title = element_text(size = 11), axis.text = element_text(size = 10))
@@ -241,12 +266,12 @@ p3 <- ggplot(all_long %>% filter(parameter == "Intercept"), aes(x = value)) +
 p1 / p2 / p3 + plot_layout(heights = c(1, 1, 1))
 ```
 
-# Prior Sensitivity
+# Prior Sensitivity Analysis
 
 ```{r}
-fit_main <- readRDS("fit_bayesian_entropy_relegation.rds")
-fit_flat <- readRDS("fit_sensitivity_default.rds")
-fit_skep <- readRDS("fit_sensitivity_skeptical.rds")
+fit_main <- readRDS("../data/processed/fit_bayesian_entropy_relegation.rds")
+fit_flat <- readRDS("../data/processed/fit_sensitivity_default.rds")
+fit_skep <- readRDS("../data/processed/fit_sensitivity_skeptical.rds")
 
 extract_coefs <- function(fit) {
   post2 <- as_draws_df(fit)
@@ -259,9 +284,9 @@ extract_coefs <- function(fit) {
 
 sens_df <- bind_rows(
   extract_coefs(fit_main) %>% mutate(Prior = "Weakly Informative"),
-  extract_coefs(fit_flat) %>% mutate(Prior = "Flat"),
+  extract_coefs(fit_flat) %>% mutate(Prior = "Flat (Default)"),
   extract_coefs(fit_skep) %>% mutate(Prior = "Skeptical")
-) %>% mutate(Prior = factor(Prior, levels = c("Weakly Informative", "Flat", "Skeptical"))) %>%
+) %>% mutate(Prior = factor(Prior, levels = c("Weakly Informative", "Flat (Default)", "Skeptical"))) %>%
   pivot_longer(
     cols = c(Median_mean, Median_var, Lower_mean, Lower_var, Upper_mean, Upper_var),
     names_pattern = "(.*)_(mean|var)", names_to = c(".value", "param"), values_to = "value"
@@ -275,16 +300,18 @@ ggplot(sens_df, aes(x = Median, y = Prior)) +
   geom_point(aes(color = Prior), size = 4.5) +
   facet_wrap(~Parameter, scales = "free_x", ncol = 1) +
   scale_color_viridis_d(option = "plasma", end = 0.8) +
-  labs(title = "Prior Sensitivity", subtitle = "Medians & 95% CIs", x = "Coefficient", y = "") +
+  labs(title = "Robustness Across Prior Choices",
+       subtitle = "Posterior medians and 95% credible intervals",
+       x = "Coefficient (log-odds)", y = "") +
   theme_minimal(base_size = 13) +
   theme(plot.title = element_text(face = "bold", size = 14),
         axis.text = element_text(size = 12), axis.title = element_text(size = 12),
         legend.position = "none", strip.text = element_text(face = "bold", size = 12))
 ```
 
-**Priors**: Weakly Informative $\mathcal{N}(0, 1.5)$ | Flat $\mathcal{N}(0, 10)$ | Skeptical $\mathcal{N}(0, 0.5)$
+**Weakly Informative**: $\mathcal{N}(0, 1.5)$ — allows moderate effects. **Flat**: $\mathcal{N}(0, 10)$ — nearly non-informative; tests if data alone drives inference. **Skeptical**: $\mathcal{N}(0, 0.5)$ — encodes null that entropy has negligible predictive power; ~10pp change per SD.
 
-# Season Effects
+# Season-Level Variation
 
 ```{r, fig.height=4}
 se <- ranef(fit_main)$season[, , "Intercept"] %>%
@@ -298,7 +325,9 @@ ggplot(se, aes(x = season, y = Estimate)) +
   geom_col(fill = "#2C3E50", alpha = 0.8) +
   geom_errorbar(aes(ymin = Q2.5, ymax = Q97.5), width = 0.5, color = "#E74C3C", linewidth = 1) +
   scale_x_continuous(breaks = seq(2004, 2025, 2)) +
-  labs(title = "Season Intercepts", subtitle = "95% CIs", x = "Season", y = "Intercept") +
+  labs(title = "Season-Level Varying Intercepts",
+       subtitle = "Estimates with 95% credible intervals",
+       x = "Season", y = "Intercept (log-odds)") +
   theme_minimal(base_size = 13) +
   theme(plot.title = element_text(face = "bold", size = 14),
         axis.title = element_text(size = 12), axis.text = element_text(size = 11))
@@ -306,9 +335,11 @@ ggplot(se, aes(x = season, y = Estimate)) +
 
 # Future Work
 
-- **In-season prediction:** Rolling entropy at matchweek 30 for mid-season forecasting
-- **Structured priors:** Cauchy(0, 2.5) and R2-D2 shrinkage for regularization
+1. **In-season prediction:** Compute rolling entropy up to a fixed matchweek (e.g., MW 30) for mid-season relegation forecasting rather than post-hoc analysis.
+
+2. **Structured priors:** Explore Cauchy(0, 2.5) (Gelman et al., 2008) and R2-D2 shrinkage (Zhang et al., 2022) for principled regularization.
 
 # References
 
-Buchdahl (2019), *Wisdom of the Crowds*. Clarke et al. (2017), *Am. J. Sports Sci.*, 5(6).
+Buchdahl (2019), *Wisdom of the Crowds*.
+Clarke et al. (2017), *Am. J. Sports Sci., 5*(6).
