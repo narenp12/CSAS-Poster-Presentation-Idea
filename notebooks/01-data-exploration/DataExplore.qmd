@@ -17,7 +17,6 @@ full_data <- sapply(files, read_csv)
 
 ```{r}
 s04_sub <- full_data$`../../data/raw/seasonal/Season02004.csv`
-# DataExplorer::create_report(s04_sub)
 ```
 ## Season 2004 subset, Bet365 odds and NO Asian handicap, example cleaning and mutation
 
@@ -35,17 +34,8 @@ games <- full_data %>%
   map(~ .x %>%
     select(Date, HomeTeam, AwayTeam, FTHG, FTAG, FTR, B365H, B365D, B365A) %>%
     mutate(Date = dmy(Date)) %>%
-    mutate(Season = year(max(Date)))) %>%
+    mutate(Season = year(max(Date, na.rm = TRUE)))) %>%
   bind_rows()
-```
-```{r}
-head(games)
-```
-```{r}
-plot_missing(games)
-games %>% filter(is.na(games$Season))
-games$Season[is.na(games$Season)] <- 2015
-plot_missing(games)
 ```
 
 ## Team level dataset

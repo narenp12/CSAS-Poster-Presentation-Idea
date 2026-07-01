@@ -21,9 +21,9 @@ library(patchwork)
 
 # Research Question
 
-**Goal:** Determine whether match-level uncertainty (entropy) contains predictive signal for relegation outcomes, beyond what is captured by bookmaker probabilities alone.
+**Goal:** Test whether match-level uncertainty (entropy) contains predictive signal for relegation outcomes, beyond what bookmaker probabilities capture.
 
-**Hypothesis:** Higher average match uncertainty (entropy) for a team during the season is associated with a higher probability of relegation, controlling for other factors.
+**Hypothesis:** Higher average match uncertainty (entropy) for a team during the season is associated with a higher probability of relegation, controlling for match-level entropy variance and season effects.
 
 **Approach:** Construct entropy features from calibrated bookmaker odds for each team each season, then use a Bayesian hierarchical logistic regression to predict eventual relegation, pooling across teams and seasons.
 
@@ -309,7 +309,7 @@ ggplot(sens_df, aes(x = Median, y = Prior)) +
         legend.position = "none", strip.text = element_text(face = "bold", size = 12))
 ```
 
-**Weakly Informative**: $\mathcal{N}(0, 1.5)$ — allows moderate effects. **Flat**: $\mathcal{N}(0, 10)$ — nearly non-informative; tests if data alone drives inference. **Skeptical**: $\mathcal{N}(0, 0.5)$ — encodes null that entropy has negligible predictive power; ~10pp change per SD.
+**Weakly Informative**: $\mathcal{N}(0, 1.5)$ — allows moderate effects. **Flat**: $\mathcal{N}(0, 10)$ — nearly non-informative; tests if data alone drives inference. **Skeptical**: $\mathcal{N}(0, 0.5)$ — encodes null that entropy has negligible predictive power; roughly 10pp change per SD.
 
 # Season-Level Variation
 

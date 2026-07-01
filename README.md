@@ -6,7 +6,7 @@ Produced for the Connecticut Sports Analytics Symposium (CSAS) 2026.
 
 ## The idea
 
-Bookmakers set odds that reflect match uncertainty. If a team's matches are consistently hard to call (high uncertainty week after week), maybe that tells us something about their quality. I tested this by pulling 22 seasons of Premier League Bet365 odds, converting them to probabilities, measuring each match's Shannon entropy, and feeding team-level entropy features into a Bayesian logistic regression to predict relegation.
+Bookmakers set odds that reflect match uncertainty. If a team's matches are consistently hard to call (high uncertainty week after week), maybe that tells us something about their quality. I tested this with 22 seasons of Premier League Bet365 odds: calibrated each match's probabilities via the power method, computed Shannon entropy per match, then fed team-level entropy features into a Bayesian logistic regression to predict relegation.
 
 Main finding: a one-standard-deviation bump in average match entropy raises relegation odds by about 55%, with a 100% posterior probability of a positive effect. It holds up across different priors too.
 

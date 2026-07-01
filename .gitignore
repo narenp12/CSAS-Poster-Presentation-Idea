@@ -4,3 +4,6 @@
 .Ruserdata
 
 /.luarc.json
+
+# Quarto rendering artifacts
+*_files/
